@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertTradeSchema, insertBotConfigSchema, insertDailyMetricsSchema } from "@shared/schema";
+import { exchangeAPI } from "./exchange";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint
@@ -50,10 +51,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('GET /api/config called');
       const config = await storage.getBotConfig();
       console.log('Config retrieved:', config);
-      res.json(config);
+      
+      // Force response completion
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(config));
+      console.log('Response sent for /api/config');
     } catch (error) {
       console.error('Error in /api/config:', error);
-      res.status(500).json({ error: 'Failed to fetch bot config' });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to fetch bot config' }));
     }
   });
   
@@ -67,8 +73,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Market data endpoints
-  app.get('/api/market/:pair', async (req, res) => {
+  // Storage-based market data endpoints (for historical data)
+  app.get('/api/storage/market/:pair', async (req, res) => {
     try {
       const { pair } = req.params;
       const data = await storage.getLatestMarketData(pair);
@@ -81,7 +87,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get('/api/market/:pair/history', async (req, res) => {
+  app.get('/api/storage/market/:pair/history', async (req, res) => {
     try {
       const { pair } = req.params;
       const hours = req.query.hours ? parseInt(req.query.hours as string) : 24;
@@ -135,6 +141,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Failed to fetch bot status' });
     }
   });
+
+  // Exchange health check
+  app.get('/api/exchange/health', async (req, res) => {
+    try {
+      const isConnected = await exchangeAPI.isConnected();
+      res.json({ connected: isConnected, timestamp: new Date().toISOString() });
+    } catch (error) {
+      res.status(500).json({ connected: false, error: 'Exchange connection failed' });
+    }
+  });
+
+  // Exchange-based market data endpoints (real-time)
+  app.get('/api/exchange/market/:symbol', async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const marketData = await exchangeAPI.getMarketData(symbol.toUpperCase());
+      res.json(marketData);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch market data' });
+    }
+  });
+  
+  app.get('/api/exchange/market/:symbol/orderbook', async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const orderBook = await exchangeAPI.getOrderBook(symbol.toUpperCase(), limit);
+      res.json(orderBook);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch order book' });
+    }
+  });
+  
+  app.get('/api/exchange/market/data/all', async (req, res) => {
+    try {
+      const config = await storage.getBotConfig();
+      const marketDataPromises = config.pairs.map(async (pair) => {
+        try {
+          return await exchangeAPI.getMarketData(pair);
+        } catch (error) {
+          console.error(`Failed to get market data for ${pair}:`, error);
+          return null;
+        }
+      });
+      
+      const marketData = (await Promise.all(marketDataPromises)).filter(data => data !== null);
+      res.json(marketData);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch market data for all pairs' });
+    }
+  });
+  
+  // Arbitrage opportunities endpoint
+  app.get('/api/arbitrage/opportunities', async (req, res) => {
+    try {
+      const config = await storage.getBotConfig();
+      const opportunities = [];
+      
+      for (const pair of config.pairs) {
+        try {
+          const marketData = await exchangeAPI.getMarketData(pair);
+          
+          // Calculate if this is a valid arbitrage opportunity
+          const basisThreshold = parseFloat(config.basisEntry);
+          const isOpportunity = Math.abs(marketData.basisPercent) >= basisThreshold;
+          
+          if (isOpportunity) {
+            opportunities.push({
+              ...marketData,
+              signal: marketData.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
+              potentialProfit: Math.abs(marketData.basisPercent) - basisThreshold,
+              confidence: Math.min(100, (Math.abs(marketData.basisPercent) / basisThreshold) * 50)
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to check arbitrage for ${pair}:`, error);
+        }
+      }
+      
+      res.json(opportunities);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch arbitrage opportunities' });
+    }
+  });
+
+  // Initialize exchange API
+  try {
+    await exchangeAPI.initialize();
+    console.log('Exchange API initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize exchange API:', error);
+  }
 
   const httpServer = createServer(app);
   return httpServer;
