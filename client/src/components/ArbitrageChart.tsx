@@ -12,6 +12,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
@@ -23,7 +24,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 type ChartType = 'basis' | 'funding' | 'wyckoff' | 'gex' | 'pnl';
@@ -114,18 +116,25 @@ export default function ArbitrageChart({ type, title, data, labels, className }:
           display: false
         },
         ticks: {
-          color: 'hsl(var(--muted-foreground))',
-          maxTicksLimit: 6
+          color: 'hsl(var(--foreground) / 0.7)',
+          maxTicksLimit: 6,
+          font: {
+            size: 12
+          }
         }
       },
       y: {
         display: true,
         grid: {
-          color: 'hsl(var(--border))',
-          display: true
+          color: 'hsl(var(--border) / 0.3)',
+          display: true,
+          lineWidth: 1
         },
         ticks: {
-          color: 'hsl(var(--muted-foreground))',
+          color: 'hsl(var(--foreground) / 0.7)',
+          font: {
+            size: 12
+          },
           callback: function(value) {
             return `${value}${config.unit}`;
           }
