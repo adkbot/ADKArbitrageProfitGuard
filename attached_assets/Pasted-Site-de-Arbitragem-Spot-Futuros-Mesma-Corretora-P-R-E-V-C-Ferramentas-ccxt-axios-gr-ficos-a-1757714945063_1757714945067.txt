@@ -1,0 +1,200 @@
+Site de Arbitragem Spot↔Futuros (Mesma Corretora) — P.R.E.V.C.
+
+Ferramentas: ccxt, axios, gráficos ativos, Wyckoff, GEX/Gamma (Deribit API pública)
+UI obrigatória: botões Iniciar / Pausar / Parar + Engrenagem (⚙︎) com Modal de Configuração
+Gestão de capital: juros compostos automáticos sobre lucro líquido por operação
+
+0) Contexto & Objetivo
+
+Construir um site completo que detecta e executa arbitragem Spot↔Futuros na mesma corretora (ex.: Binance), filtrando entradas por Wyckoff (regime) e GEX/Gamma (trava de contexto) para reduzir drawdown.
+A IA deve construir em micro-partes (pequenas entregas), e só avançar quando cada parte passar nos testes.
+
+🔐 APIs & Credenciais (incluir no código como defaults e no modal ⚙️)
+
+Exchange (via ccxt): EXCHANGE=binance (plugável p/ outras)
+
+Deribit (GEX pública) — usar estes valores por padrão (podem ser sobrescritos no modal):
+
+DERIBIT_CLIENT_ID = dD7we7mS
+
+DERIBIT_API_KEY = Zp6KGk3ROQcPXILEUxOs5E3FaAIpCx_nFhRTMLSyrDQ
+
+Observação: deixar pré-preenchido no Modal ⚙️ e em .env.example. Não commitar .env real.
+
+.env.example (obrigatório neste formato):
+
+EXCHANGE=binance
+API_KEY=
+API_SECRET=
+
+DERIBIT_CLIENT_ID=dD7we7mS
+DERIBIT_API_KEY=Zp6KGk3ROQcPXILEUxOs5E3FaAIpCx_nFhRTMLSyrDQ
+
+PAIRS=BTC/USDT,ETH/USDT
+BASIS_ENTRY=0.004
+BASIS_EXIT=0.0015
+MAX_NOTIONAL_USDT=500
+MAX_DAILY_TRADES=10
+SLIPPAGE_K=0.0002
+FUNDING_LOOKAHEAD_H=8
+WYCKOFF_N=50
+GEX_REFRESH_SEC=120
+ARBITRAGE_ENABLED=true
+
+
+Modal ⚙️ (campos obrigatórios):
+
+Exchange (select), API Key/Secret (spot/futuros, se necessário)
+
+Deribit Client ID (pré-preenchido dD7we7mS)
+
+Deribit API Key (pré-preenchido Zp6KGk3ROQcPXILEUxOs5E3FaAIpCx_nFhRTMLSyrDQ)
+
+Parâmetros: PAIRS, BASIS_ENTRY, BASIS_EXIT, MAX_NOTIONAL_USDT, MAX_DAILY_TRADES, SLIPPAGE_K
+
+Botões no header: Iniciar, Pausar, Parar, ⚙️ (abre modal)
+
+📏 Regras de decisão (resumo operacional)
+
+Base líquida: basis_pct = (F - S)/S - fees - slippage - funding
+
+Entrar SOMENTE se: basis_pct ≥ BASIS_ENTRY e regime_score ≥ 0 (Wyckoff) e GEX_filter == OK
+
+Sair: basis_pct ≤ BASIS_EXIT ou janela de tempo T ou funding adverso
+
+Juros compostos automáticos: após cada trade lucrativo, reinvestir o lucro (aumentar notional da próxima operação respeitando MAX_NOTIONAL_USDT e limites de risco)
+
+🧪 P.R.E.V.C. em micro-partes (cada item tem Critério de Aceite “CA” + Teste Automático “TA”)
+P — PREVENÇÃO
+
+Scaffold (back: Node/Express; front: HTML/JS ou React)
+
+CA: GET /health → { ok: true }
+
+TA: teste unit de health
+
+Estado do bot + botões (IDLE/RUNNING/PAUSED/STOPPED; Iniciar/Pausar/Parar)
+
+CA: /status reflete transições válidas
+
+TA: teste de máquina de estados
+
+Modal ⚙️ com APIs (pré-preenchido Deribit)
+
+CA: salvar atualiza config sem reload; Testar Conexão retorna OK
+
+TA: mock de rede e persistência
+
+R — REVISÃO
+
+Camada Exchange (ccxt): tickers, fees, funding (perp)
+
+CA: fetchTicker e fees válidos
+
+TA: mocks determinísticos
+
+Cálculo de Base
+
+CA: /opps lista pares ordenados por basis_pct
+
+TA: fixtures geram ranking estável
+
+Wyckoff (regime) → regime_score ∈ [-1,+1]
+
+CA: série estável; eventos anotados
+
+TA: casos sintéticos acionam eventos
+
+GEX (Deribit) via API pública com os defaults acima
+
+CA: GET /gex?symbol=BTC → valor ∈ [-1,+1], cache por GEX_REFRESH_SEC
+
+TA: queda de API → fallback/cache, sem operar às cegas
+
+E — EXECUÇÃO
+
+Detecção de oportunidade (filtros Wyckoff + GEX)
+
+CA: alerta gerado apenas quando todos critérios OK
+
+TA: simulação de thresholds
+
+Execução (paper): abrir Long Spot + Short Futuro (ou inverso) 1:1
+
+CA: retorno {status:'paper-opened', legs:[…]} coerente
+
+TA: slippage/fills parciais simulados
+
+Fechamento (basis/tempo/funding)
+
+CA: {status:'paper-closed'} e reconciliação
+
+TA: cenários de saída
+
+Juros compostos automáticos
+
+CA: após trade positivo, próximo notional = notional_anterior + lucro (respeitar limites)
+
+TA: série de trades mostra crescimento do notional e PnL
+
+V — VALIDAÇÃO
+
+Backtest (7–30 dias) com compostagem
+
+CA: PnL > baseline sem compostagem; DD aceitável
+
+TA: resultados reprodutíveis (seed fixa)
+
+Paper 48–72h
+
+CA: sem violar limites; latência ok; compostagem ativa
+
+TA: alertas se API/latência falhar
+
+C — CONCLUSÃO
+
+Go-live checklist
+
+CA: Kill-switch (UI + ENV), logs/auditoria, UI com gráficos (candles, basis, funding, Wyckoff, GEX, PnL), modal ⚙️ operante
+
+Runbook & rollback
+
+CA: documento de operação / pausa / reversão testado
+
+🧭 Plano numerado que a IA deve seguir (checklist de execução)
+
+Criar backend (/health, /status) → TA health ok
+
+Criar estado do bot + rotas /bot/start|pause|stop → TA transições
+
+Criar frontend com Iniciar/Pausar/Parar/⚙️ → TA DOM + fetch
+
+Implementar Modal ⚙️ com campos e pré-preenchidos Deribit (ID/API acima) + “Testar Conexão” → TA mock axios
+
+Integrar ccxt (exchange escolhida) → TA ticker/fees/funding
+
+Implementar cálculo de base e rota /opps → TA fixtures
+
+Implementar Wyckoff (regime_score) → TA casos sintéticos
+
+Integrar GEX (Deribit) com os defaults fornecidos → TA cache/fallback
+
+Ligar filtros (Wyckoff + GEX) → TA gating correto
+
+Implementar execução (paper) Spot↔Fut 1:1 → TA slippage/fills
+
+Implementar fechamento (basis/tempo/funding) → TA saída
+
+Implementar juros compostos automáticos (reinvest) → TA notional cresce c/ lucro
+
+Adicionar gráficos ativos (candles, basis, funding, Wyckoff, GEX, PnL) → TA render ok
+
+Backtest com compostagem → TA PnL > baseline
+
+Paper 48–72h → TA estabilidade
+
+Go-live checklist + runbook → TA checklist concluído
+
+Observação (opinião de programador)
+
+Wyckoff + GEX como trava de contexto evita entradas quando a gamma pinning pode achatar o spread — isso reduz drawdown nos dias de compressão.
