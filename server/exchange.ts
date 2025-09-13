@@ -163,20 +163,11 @@ export class ExchangeAPI {
       }
     } catch (error) {
       console.error(`❌ Erro ao buscar preço spot para ${symbol}:`, error.message);
-      
-      // 🔧 DESENVOLVIMENTO: Usar dados mock quando geobloqueado
-      if (process.env.ARBITRAGE_ENABLED === "false" || error.message.includes("451")) {
-        const mockPrice = Math.random() * 200 + 50; // $50 to $250 range
-        console.log(`🎭 MOCK: Preço spot para ${symbol}: $${mockPrice.toFixed(6)}`);
-        this.setCachedPrice(`spot_${symbol}`, mockPrice);
-        return mockPrice;
-      }
-      
       throw error;
     }
   }
 
-  // 💎 BUSCAR PREÇO FUTURES - DADOS REAIS OU MOCK EM DESENVOLVIMENTO
+  // 💎 BUSCAR PREÇO FUTURES - APENAS DADOS REAIS
   async getFuturesPrice(symbol: string): Promise<number> {
     try {
       // 🔥 VERIFICAR CACHE PRIMEIRO
@@ -227,24 +218,11 @@ export class ExchangeAPI {
       }
     } catch (error) {
       console.error(`❌ Erro ao buscar preço futures para ${symbol}:`, error.message);
-      
-      // 🔧 DESENVOLVIMENTO: Usar dados mock quando geobloqueado
-      if (process.env.ARBITRAGE_ENABLED === "false" || error.message.includes("451")) {
-        // Get spot price from cache or generate mock, then add small difference for futures
-        const spotKey = `spot_${symbol}`;
-        const cachedSpot = this.getCachedPrice(spotKey);
-        const basePrice = cachedSpot || (Math.random() * 200 + 50);
-        const mockPrice = basePrice + (Math.random() - 0.5) * 2; // Slight difference from spot
-        console.log(`🎭 MOCK: Preço futures para ${symbol}: $${mockPrice.toFixed(6)}`);
-        this.setCachedPrice(`futures_${symbol}`, mockPrice);
-        return mockPrice;
-      }
-      
       throw error;
     }
   }
 
-  // 💰 FUNDING RATE - DADOS REAIS OU MOCK EM DESENVOLVIMENTO
+  // 💰 FUNDING RATE - APENAS DADOS REAIS
   async getFundingRate(symbol: string): Promise<number> {
     try {
       const binanceSymbol = symbol.replace('/', '');
@@ -261,13 +239,6 @@ export class ExchangeAPI {
       
     } catch (error) {
       console.error(`❌ Erro funding rate para ${symbol}:`, error.message);
-      
-      // 🔧 DESENVOLVIMENTO: Usar dados mock quando geobloqueado
-      if (process.env.ARBITRAGE_ENABLED === "false" || error.message.includes("451")) {
-        const mockRate = (Math.random() - 0.5) * 0.0002; // -0.01% to +0.01%
-        console.log(`🎭 MOCK: Funding rate para ${symbol}: ${(mockRate * 100).toFixed(4)}%`);
-        return mockRate;
-      }
       
       throw new Error(`Não foi possível obter funding rate para ${symbol}: ${error.message}`);
     }
@@ -290,13 +261,6 @@ export class ExchangeAPI {
       
     } catch (error) {
       console.error(`❌ Erro volume para ${symbol}:`, error.message);
-      
-      // 🔧 DESENVOLVIMENTO: Usar dados mock quando geobloqueado
-      if (process.env.ARBITRAGE_ENABLED === "false" || error.message.includes("451")) {
-        const mockVolume = Math.random() * 10000000 + 1000000; // 1M to 11M volume
-        console.log(`🎭 MOCK: Volume 24h para ${symbol}: $${mockVolume.toLocaleString()}`);
-        return mockVolume;
-      }
       
       throw new Error(`Não foi possível obter volume para ${symbol}: ${error.message}`);
     }
