@@ -1,5 +1,5 @@
-import { ExchangeAPI } from './exchange.js';
-import { IStorage } from './storage.js';
+import { ExchangeAPI } from './exchange';
+import { IStorage } from './storage';
 
 interface WyckoffPhase {
   phase: 'accumulation' | 'markup' | 'distribution' | 'markdown';
