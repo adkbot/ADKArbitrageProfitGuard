@@ -36,6 +36,14 @@ export interface IStorage {
   getLatestMarketData(pair: string): Promise<MarketData | undefined>;
   saveMarketData(data: InsertMarketData): Promise<MarketData>;
   getMarketDataHistory(pair: string, hours: number): Promise<MarketData[]>;
+  
+  // 🔥 TOP 30 PAIRS ANALYSIS METHODS
+  getTopPairsByPerformance(limit?: number): Promise<string[]>;
+  updatePairPerformanceScore(pair: string, marketData: { 
+    basisPercent: number; 
+    volume24h: number;
+    fundingRate?: number;
+  }): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -45,6 +53,10 @@ export class MemStorage implements IStorage {
   private dailyMetrics: Map<string, DailyMetrics>;
   private marketData: Map<string, MarketData[]>;
   private tradeIdCounter: number;
+  // 🔥 SISTEMA DE RANKING DOS TOP 30 PARES - DIÁRIO COM CUSTOS REAIS
+  private dailyPairScores: Map<string, Map<string, number>>; // Map<date, Map<pair, score>>
+  private pairAnalysisHistory: Map<string, { volume24h: number; basis: number; netScore: number; timestamp: Date }[]>;
+  private lastScoreResetDate: string;
 
   constructor() {
     this.users = new Map();
@@ -52,15 +64,39 @@ export class MemStorage implements IStorage {
     this.dailyMetrics = new Map();
     this.marketData = new Map();
     this.tradeIdCounter = 1;
+    // 🔥 INICIALIZAR SISTEMA DE RANKING DIÁRIO
+    this.dailyPairScores = new Map();
+    this.pairAnalysisHistory = new Map();
+    this.lastScoreResetDate = new Date().toISOString().split('T')[0];
     
-    // Initialize default bot config
+    // 🔥 TOP 50 PARES PARA SELEÇÃO AUTOMÁTICA DOS 30 MELHORES
     this.botConfig = {
       id: 1,
-      pairs: ['BTC/USDT', 'ETH/USDT'],
+      pairs: [
+        // 🪙 TOP TIER - Major Coins
+        'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT',
+        'DOGE/USDT', 'SOL/USDT', 'TRX/USDT', 'MATIC/USDT', 'LTC/USDT',
+        
+        // 💰 HIGH VOLUME - DeFi & Layer 1
+        'AVAX/USDT', 'DOT/USDT', 'SHIB/USDT', 'UNI/USDT', 'ATOM/USDT',
+        'LINK/USDT', 'ETC/USDT', 'FTM/USDT', 'NEAR/USDT', 'ALGO/USDT',
+        
+        // 🚀 EMERGING - High Potential
+        'APT/USDT', 'SUI/USDT', 'INJ/USDT', 'TIA/USDT', 'SEI/USDT',
+        'ARB/USDT', 'OP/USDT', 'BLUR/USDT', 'PEPE/USDT', 'WLD/USDT',
+        
+        // 📈 VOLATILE - Trading Opportunities  
+        'FIL/USDT', 'AAVE/USDT', 'MKR/USDT', 'CRV/USDT', 'SUSHI/USDT',
+        'YFI/USDT', 'COMP/USDT', 'SNX/USDT', 'REN/USDT', 'KSM/USDT',
+        
+        // 🌐 ADDITIONAL - Volume & Liquidity
+        'ICP/USDT', 'VET/USDT', 'HBAR/USDT', 'EGLD/USDT', 'THETA/USDT',
+        'MANA/USDT', 'SAND/USDT', 'AXS/USDT', 'GALA/USDT', 'CHZ/USDT'
+      ],
       basisEntry: '0.004',
       basisExit: '0.0015',
       maxNotionalUsdt: '500',
-      maxDailyTrades: 10,
+      maxDailyTrades: 30, // 🔄 Aumentado para suportar mais pares
       slippageK: '0.0002',
       fundingLookaheadH: 8,
       wyckoffN: 50,
@@ -190,6 +226,120 @@ export class MemStorage implements IStorage {
       .filter(data => data.timestamp >= cutoffTime)
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
+
+  // 🔥 TOP 30 PAIRS RANKING SYSTEM - DIÁRIO COM CUSTOS REAIS
+  async getTopPairsByPerformance(limit: number = 30): Promise<string[]> {
+    const today = new Date().toISOString().split('T')[0];
+    this.ensureDailyScoreMap(today);
+    
+    const todayScores = this.dailyPairScores.get(today) || new Map();
+    const scores = Array.from(todayScores.entries())
+      .sort(([,a], [,b]) => b - a) // Ordenar por score decrescente (lucro líquido)
+      .slice(0, limit)
+      .map(([pair]) => pair);
+    
+    // Se não há scores suficientes do dia, usar todos os pares configurados
+    if (scores.length < limit) {
+      const allPairs = this.botConfig?.pairs || [];
+      const remainingPairs = allPairs.filter(pair => !scores.includes(pair));
+      scores.push(...remainingPairs.slice(0, limit - scores.length));
+    }
+    
+    return scores.slice(0, limit);
+  }
+
+  async updatePairPerformanceScore(pair: string, marketData: { 
+    basisPercent: number; 
+    volume24h: number;
+    fundingRate?: number;
+  }): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+    this.ensureDailyScoreMap(today);
+    
+    // 🏦 CALCULAR SCORE REAL CONSIDERANDO TODOS OS CUSTOS
+    const config = this.botConfig!;
+    const basisAbs = Math.abs(marketData.basisPercent);
+    
+    // Custos típicos de arbitragem
+    const tradingFees = 0.04; // 0.02% cada lado (spot + futures)
+    const slippage = parseFloat(config.slippageK) * 100; // slippageK em %
+    const funding = Math.abs(marketData.fundingRate || 0) * 8; // 8h funding rate
+    
+    // 💰 LUCRO LÍQUIDO = BASIS - TODOS OS CUSTOS
+    const netProfitPercent = basisAbs - tradingFees - slippage - funding;
+    
+    // 📊 FATOR DE VOLUME - favorece pares com mais liquidez
+    const volumeFactor = Math.min(1.2, 1 + (marketData.volume24h / 100_000_000) * 0.2);
+    
+    // 🎯 SCORE FINAL = LUCRO LÍQUIDO * FATOR VOLUME * 100
+    const finalScore = Math.max(0, netProfitPercent * volumeFactor * 100);
+    
+    // Atualizar score diário
+    const todayScores = this.dailyPairScores.get(today)!;
+    const currentScore = todayScores.get(pair) || 0;
+    const smoothedScore = (currentScore * 0.8) + (finalScore * 0.2); // Suavização
+    todayScores.set(pair, smoothedScore);
+    
+    // Manter histórico de análise
+    if (!this.pairAnalysisHistory.has(pair)) {
+      this.pairAnalysisHistory.set(pair, []);
+    }
+    
+    const history = this.pairAnalysisHistory.get(pair)!;
+    history.push({
+      volume24h: marketData.volume24h, // DADOS REAIS
+      basis: basisAbs,
+      netScore: finalScore,
+      timestamp: new Date()
+    });
+    
+    // Manter apenas últimas 24 horas de histórico
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    this.pairAnalysisHistory.set(pair, 
+      history.filter(h => h.timestamp >= cutoff)
+    );
+  }
+  
+  // 🔄 GARANTIR MAPA DE SCORES DIÁRIOS
+  private ensureDailyScoreMap(date: string): void {
+    // Reset diário às 00:00 UTC
+    if (date !== this.lastScoreResetDate) {
+      console.log(`🌅 RESET DIÁRIO DE SCORES: ${this.lastScoreResetDate} → ${date}`);
+      this.lastScoreResetDate = date;
+    }
+    
+    if (!this.dailyPairScores.has(date)) {
+      this.dailyPairScores.set(date, new Map());
+      
+      // Limpar dados de mais de 7 dias
+      const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        .toISOString().split('T')[0];
+      
+      for (const [oldDate] of this.dailyPairScores) {
+        if (oldDate < cutoffDate) {
+          this.dailyPairScores.delete(oldDate);
+        }
+      }
+    }
+  }
+  
+  // 📈 OBTER DADOS DE PERFORMANCE PARA DEBUG
+  async getPairPerformanceData(pair: string): Promise<{
+    todayScore: number;
+    history: { volume24h: number; basis: number; netScore: number; timestamp: Date }[];
+  }> {
+    const today = new Date().toISOString().split('T')[0];
+    const todayScore = this.dailyPairScores.get(today)?.get(pair) || 0;
+    const history = this.pairAnalysisHistory.get(pair) || [];
+    
+    return { todayScore, history };
+  }
 }
 
 export const storage = new MemStorage();
+
+// 🔄 AUTO-RESET DIÁRIO DE SCORES ÀS 00:00 UTC
+setInterval(() => {
+  const today = new Date().toISOString().split('T')[0];
+  (storage as MemStorage)['ensureDailyScoreMap'](today);
+}, 60 * 60 * 1000); // Verificar a cada hora

@@ -209,11 +209,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const isOpportunity = Math.abs(marketData.basisPercent) >= basisThreshold;
           
           if (isOpportunity) {
-            opportunities.push({
+            const opportunity = {
               ...marketData,
               signal: marketData.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
               potentialProfit: Math.abs(marketData.basisPercent) - basisThreshold,
               confidence: Math.min(100, (Math.abs(marketData.basisPercent) / basisThreshold) * 50)
+            };
+            opportunities.push(opportunity);
+            
+            // 🔥 ATUALIZAR PERFORMANCE SCORE PARA RANKING COM DADOS REAIS
+            await storage.updatePairPerformanceScore(pair, {
+              basisPercent: marketData.basisPercent,
+              volume24h: marketData.volume24h || 0,
+              fundingRate: marketData.fundingRate || 0
             });
           }
         } catch (error) {
@@ -224,6 +232,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(opportunities);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch arbitrage opportunities' });
+    }
+  });
+
+  // 🔥 TOP 30 PAIRS ENDPOINT - SISTEMA DE RANKING DIÁRIO PARALELIZADO
+  app.get('/api/arbitrage/top-pairs', async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 30;
+      const topPairs = await storage.getTopPairsByPerformance(limit);
+      
+      console.log(`🏆 Buscando dados para ${topPairs.length} top pairs...`);
+      
+      // 🚀 PARALELIZAR BUSCA DE DADOS PARA EVITAR 429 ERRORS
+      const marketDataPromises = topPairs.map(async (pair, index) => {
+        try {
+          const marketData = await exchangeAPI.getMarketData(pair);
+          const performanceData = await storage.getPairPerformanceData(pair);
+          
+          return {
+            rank: index + 1,
+            pair,
+            basis: marketData.basisPercent,
+            spotPrice: marketData.spotPrice,
+            futuresPrice: marketData.futuresPrice,
+            volume24h: marketData.volume24h || 0,
+            score: performanceData.todayScore,
+            netProfitEstimate: Math.max(0, Math.abs(marketData.basisPercent) - 0.06), // Deduz custos típicos
+            lastUpdate: new Date().toISOString()
+          };
+        } catch (error) {
+          console.error(`Erro obtendo dados para ${pair}:`, error);
+          return {
+            rank: index + 1,
+            pair,
+            basis: 0,
+            spotPrice: 0,
+            futuresPrice: 0,
+            volume24h: 0,
+            score: 0,
+            netProfitEstimate: 0,
+            lastUpdate: new Date().toISOString(),
+            error: 'Data unavailable'
+          };
+        }
+      });
+      
+      const pairDetails = await Promise.all(marketDataPromises);
+      
+      // Filtrar pares com erro e reordenar por score
+      const validPairs = pairDetails
+        .filter(p => !p.error)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+      
+      res.json({
+        strategy: 'DAILY_NET_PROFIT_RANKING',
+        totalPairs: validPairs.length,
+        topPairs: validPairs,
+        costs: {
+          tradingFees: '0.04%',
+          slippage: '0.02%',
+          fundingRate: 'Variable'
+        },
+        generatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Erro no endpoint top-pairs:', error);
+      res.status(500).json({ error: 'Failed to fetch top pairs' });
     }
   });
 
@@ -266,11 +341,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Auto-start analysis engine if arbitrage is enabled
+  // 🔍 ENDPOINT DE DEBUG PARA SCORES E RANKING
+  app.get('/api/debug/pair-scores', async (req, res) => {
+    try {
+      const config = await storage.getBotConfig();
+      const debugData = [];
+      
+      console.log('🔍 Gerando debug de scores de performance...');
+      
+      for (const pair of config.pairs.slice(0, 10)) { // Apenas 10 para teste
+        try {
+          const marketData = await exchangeAPI.getMarketData(pair);
+          const performanceData = await storage.getPairPerformanceData(pair);
+          
+          // Calcular custos manualmente para debug
+          const basisAbs = Math.abs(marketData.basisPercent);
+          const tradingFees = 0.04;
+          const slippage = parseFloat(config.slippageK) * 100;
+          const funding = Math.abs(marketData.fundingRate || 0) * 8;
+          const netProfit = basisAbs - tradingFees - slippage - funding;
+          
+          debugData.push({
+            pair,
+            basis: marketData.basisPercent,
+            basisAbs,
+            costs: {
+              tradingFees,
+              slippage,
+              funding,
+              total: tradingFees + slippage + funding
+            },
+            netProfit,
+            volume24h: marketData.volume24h || 0,
+            finalScore: performanceData.todayScore,
+            historyCount: performanceData.history.length
+          });
+        } catch (error) {
+          console.error(`Debug error for ${pair}:`, error);
+        }
+      }
+      
+      // Ordenar por score para mostrar ranking
+      debugData.sort((a, b) => b.finalScore - a.finalScore);
+      
+      res.json({
+        explanation: 'Sistema de ranking corrigido - considera todos os custos reais',
+        formula: 'score = max(0, (|basis%| - fees - slippage - funding) * volumeFactor * 100)',
+        debugData,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to generate debug data' });
+    }
+  });
+  
+  // 🔄 ENDPOINT PARA ATUALIZAR TODOS OS SCORES MANUALMENTE
+  app.post('/api/debug/update-all-scores', async (req, res) => {
+    try {
+      await analysisEngine.updateAllPairScores();
+      res.json({ 
+        success: true, 
+        message: 'Todos os scores foram atualizados com dados reais',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update scores' });
+    }
+  });
+
+  // Auto-start analysis engine if arbitrage is enabled - FIXED: Non-blocking initialization
   const config = await storage.getBotConfig();
   if (config && config.arbitrageEnabled) {
     console.log('🚀 Auto-iniciando motor de análise automática...');
-    await analysisEngine.start();
+    
+    // Start analysis engine without waiting - prevents server startup blocking
+    analysisEngine.start().catch(error => {
+      console.error('⚠️ Erro iniciando análise automática:', error);
+    });
+    
+    // Update scores after server is fully started - don't block server startup
+    setTimeout(() => {
+      analysisEngine.updateAllPairScores().catch(error => {
+        console.error('⚠️ Erro na atualização inicial de scores:', error);
+      });
+    }, 10000); // Wait 10s for server to be fully up
   }
 
   const httpServer = createServer(app);

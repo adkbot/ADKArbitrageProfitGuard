@@ -25,6 +25,14 @@ export class ExchangeAPI {
   private wsConnections: Map<string, WebSocket> = new Map();
   private marketDataCallbacks: Map<string, (data: MarketData) => void> = new Map();
   private orderBookCallbacks: Map<string, (data: OrderBookData) => void> = new Map();
+  
+  // 🛡️ SISTEMA DE CONTROLE DE RATE LIMIT - MÁXIMO 90%
+  private priceCache = new Map<string, { price: number; timestamp: number; ttl: number }>();
+  private apiCallTracker = { count: 0, resetTime: Date.now() + 60000 }; // Reset a cada minuto
+  private readonly MAX_API_CALLS_PER_MINUTE = 54; // 90% do limite do CoinGecko (60/min)
+  private readonly CACHE_TTL_MS = 30000; // Cache 30 segundos para dados de preço
+  private lastApiCall = 0;
+  private readonly MIN_INTERVAL_MS = 1100; // Mínimo 1.1 segundos entre chamadas
 
   constructor() {
     // Initialize CCXT with Binance for spot - use real API for public data
@@ -57,6 +65,59 @@ export class ExchangeAPI {
     });
   }
 
+  // 🛡️ MÉTODOS DE CONTROLE DE RATE LIMIT E CACHE
+  private isApiCallAllowed(): boolean {
+    const now = Date.now();
+    
+    // Reset contador se passou 1 minuto
+    if (now > this.apiCallTracker.resetTime) {
+      this.apiCallTracker.count = 0;
+      this.apiCallTracker.resetTime = now + 60000;
+    }
+    
+    // Verificar se estamos abaixo de 90% do limite
+    return this.apiCallTracker.count < this.MAX_API_CALLS_PER_MINUTE;
+  }
+  
+  // 🔥 CLEAR ALL PLACEHOLDER CACHE - FORCE REAL DATA
+  clearPlaceholderCache(): void {
+    console.log('🧹 Clearing all placeholder cache entries to force real data...');
+    this.priceCache.clear();
+    console.log('✅ Cache cleared - all symbols will fetch fresh real data');
+  }
+  
+  private getCachedPrice(symbol: string): number | null {
+    const cached = this.priceCache.get(symbol);
+    if (cached && Date.now() < cached.ttl) {
+      console.log(`💾 Cache HIT para ${symbol}: $${cached.price.toFixed(2)}`);
+      return cached.price;
+    }
+    return null;
+  }
+  
+  private setCachedPrice(symbol: string, price: number): void {
+    this.priceCache.set(symbol, {
+      price,
+      timestamp: Date.now(),
+      ttl: Date.now() + this.CACHE_TTL_MS
+    });
+    console.log(`💾 Cache SET para ${symbol}: $${price.toFixed(2)} (TTL: 30s)`);
+  }
+  
+  private async waitForRateLimit(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastCall = now - this.lastApiCall;
+    
+    if (timeSinceLastCall < this.MIN_INTERVAL_MS) {
+      const waitTime = this.MIN_INTERVAL_MS - timeSinceLastCall;
+      console.log(`⏳ Aguardando ${waitTime}ms para respeitar rate limit...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastApiCall = Date.now();
+    this.apiCallTracker.count++;
+  }
+
   async initialize(): Promise<void> {
     try {
       console.log('Initializing exchange with real API keys...');
@@ -72,45 +133,108 @@ export class ExchangeAPI {
     }
   }
 
+  // 🚀 BATCH PRICING ENGINE - Fetch multiple prices in single API call
+  private batchRequestQueue: string[] = [];
+  private batchTimeout: NodeJS.Timeout | null = null;
+  private pendingBatchRequests = new Map<string, { resolve: (price: number) => void; reject: (error: Error) => void }>();
+
   async getSpotPrice(symbol: string): Promise<number> {
     try {
-      // 💰 DADOS 100% REAIS via CoinGecko (confirmado funcionando)
-      const coinId = this.getCoinGeckoId(symbol);
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`;
-      console.log(`🌍 Buscando preço real para ${symbol} (${coinId}): ${url}`);
+      // 🔥 1. VERIFICAR CACHE PRIMEIRO 
+      const cachedPrice = this.getCachedPrice(symbol);
+      if (cachedPrice !== null) {
+        return cachedPrice;
+      }
       
+      // 🔥 2. ADD TO BATCH QUEUE - ULTRA EFFICIENT
+      console.log(`🌍 Queuing ${symbol} for batch CoinGecko request`);
+      
+      const coinId = this.getCoinGeckoId(symbol);
+      if (!coinId) {
+        throw new Error(`No CoinGecko mapping found for ${symbol}`);
+      }
+      
+      return new Promise<number>((resolve, reject) => {
+        this.pendingBatchRequests.set(symbol, { resolve, reject });
+        this.batchRequestQueue.push(symbol);
+        
+        // Process batch after 500ms or when 10 symbols queued
+        if (this.batchTimeout) {
+          clearTimeout(this.batchTimeout);
+        }
+        
+        this.batchTimeout = setTimeout(() => {
+          this.processBatchRequest();
+        }, this.batchRequestQueue.length >= 10 ? 100 : 500);
+      });
+    } catch (error) {
+      console.error(`❌ CRITICAL ERROR fetching price for ${symbol}:`, error);
+      throw new Error(`Failed to get real price for ${symbol}: ${error.message}`);
+    }
+  }
+  
+  private async processBatchRequest(): Promise<void> {
+    if (this.batchRequestQueue.length === 0) return;
+    
+    const symbolsToProcess = [...this.batchRequestQueue];
+    this.batchRequestQueue = [];
+    this.batchTimeout = null;
+    
+    try {
+      // Convert symbols to CoinGecko IDs
+      const coinIds = symbolsToProcess
+        .map(symbol => this.getCoinGeckoId(symbol))
+        .filter(id => id !== null)
+        .join(',');
+      
+      console.log(`🚀 BATCH REQUEST: Fetching ${symbolsToProcess.length} prices via CoinGecko`);
+      
+      await this.waitForRateLimit();
+      
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd`;
       const response = await fetch(url, { 
         headers: { 'User-Agent': 'arbitrage-system/1.0' },
-        timeout: 10000 
+        signal: AbortSignal.timeout(15000)
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`CoinGecko batch API error: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
-      const price = data[coinId]?.usd;
       
-      if (price && price > 0) {
-        console.log(`💰 ${symbol}: Preço spot real obtido $${price.toFixed(2)}`);
-        return price;
+      // Process each symbol in the batch
+      for (const symbol of symbolsToProcess) {
+        const coinId = this.getCoinGeckoId(symbol);
+        const price = coinId ? data[coinId]?.usd : null;
+        
+        const pending = this.pendingBatchRequests.get(symbol);
+        if (pending) {
+          if (price && price > 0) {
+            console.log(`💰 ${symbol}: Real batch price $${price.toFixed(2)}`);
+            this.setCachedPrice(symbol, price);
+            pending.resolve(price);
+          } else {
+            pending.reject(new Error(`Price not found for ${symbol} in batch response`));
+          }
+          this.pendingBatchRequests.delete(symbol);
+        }
       }
-      
-      throw new Error(`Price not found in response: ${JSON.stringify(data)}`);
     } catch (error) {
-      console.error(`❌ Error fetching real spot price for ${symbol}:`, error);
+      console.error(`❌ Batch request failed:`, error);
       
-      // 🛡️ Fallback com preços conhecidos (mantém dados 100% reais)
-      const knownPrices: Record<string, number> = {
-        'BTC/USDT': 116140,  // Preço real do BTC
-        'ETH/USDT': 4704.25  // Preço real do ETH
-      };
-      
-      const fallbackPrice = knownPrices[symbol] || 50000;
-      console.log(`🛡️ Usando fallback real para ${symbol}: $${fallbackPrice}`);
-      return fallbackPrice;
+      // Reject all pending requests for this batch
+      for (const symbol of symbolsToProcess) {
+        const pending = this.pendingBatchRequests.get(symbol);
+        if (pending) {
+          pending.reject(new Error(`Batch request failed: ${error.message}`));
+          this.pendingBatchRequests.delete(symbol);
+        }
+      }
     }
   }
+
+  // REMOVED: No more fallback prices - all symbols must use real Binance data
 
   async getFuturesPrice(symbol: string): Promise<number> {
     try {
@@ -369,18 +493,76 @@ export class ExchangeAPI {
   }
 
   // Converter símbolos para IDs do CoinGecko (dados 100% reais)
-  private getCoinGeckoId(symbol: string): string {
+  private getCoinGeckoId(symbol: string): string | null {
     const mapping: Record<string, string> = {
+      // Major coins
       'BTC/USDT': 'bitcoin',
       'ETH/USDT': 'ethereum',
       'BNB/USDT': 'binancecoin',
+      
+      // Top altcoins
       'SOL/USDT': 'solana',
+      'XRP/USDT': 'ripple',
       'ADA/USDT': 'cardano',
+      'DOGE/USDT': 'dogecoin',
+      'TRX/USDT': 'tron',
+      'MATIC/USDT': 'matic-network',
+      'LTC/USDT': 'litecoin',
       'AVAX/USDT': 'avalanche-2',
       'DOT/USDT': 'polkadot',
-      'MATIC/USDT': 'matic-network'
+      'SHIB/USDT': 'shiba-inu',
+      'UNI/USDT': 'uniswap',
+      'ATOM/USDT': 'cosmos',
+      'LINK/USDT': 'chainlink',
+      'ETC/USDT': 'ethereum-classic',
+      'FTM/USDT': 'fantom',
+      'NEAR/USDT': 'near',
+      'ALGO/USDT': 'algorand',
+      
+      // Layer 1/2 tokens
+      'APT/USDT': 'aptos',
+      'SUI/USDT': 'sui',
+      'INJ/USDT': 'injective-protocol',
+      'TIA/USDT': 'celestia',
+      'SEI/USDT': 'sei-network',
+      'ARB/USDT': 'arbitrum',
+      'OP/USDT': 'optimism',
+      
+      // Meme/Social tokens
+      'BLUR/USDT': 'blur',
+      'PEPE/USDT': 'pepe',
+      'WLD/USDT': 'worldcoin-wld',
+      
+      // Storage/Infrastructure
+      'FIL/USDT': 'filecoin',
+      
+      // DeFi tokens
+      'AAVE/USDT': 'aave',
+      'MKR/USDT': 'maker',
+      'CRV/USDT': 'curve-dao-token',
+      'SUSHI/USDT': 'sushi',
+      'YFI/USDT': 'yearn-finance',
+      'COMP/USDT': 'compound-governance-token',
+      'SNX/USDT': 'havven',
+      
+      // Legacy/Other
+      'REN/USDT': 'republic-protocol',
+      'KSM/USDT': 'kusama',
+      'ICP/USDT': 'internet-computer',
+      'VET/USDT': 'vechain',
+      'HBAR/USDT': 'hedera-hashgraph',
+      'EGLD/USDT': 'elrond-egd-2',
+      'THETA/USDT': 'theta-token',
+      
+      // Gaming/Metaverse
+      'MANA/USDT': 'decentraland',
+      'SAND/USDT': 'the-sandbox',
+      'AXS/USDT': 'axie-infinity',
+      'GALA/USDT': 'gala',
+      'CHZ/USDT': 'chiliz'
     };
-    return mapping[symbol] || 'bitcoin';
+    
+    return mapping[symbol] || null;
   }
   
   // Obter saldos reais da carteira

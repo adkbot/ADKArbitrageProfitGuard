@@ -1,92 +1,131 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import BotControlButtons from '@/components/BotControlButtons';
 import StatusIndicator from '@/components/StatusIndicator';
-import DashboardMetrics from '@/components/DashboardMetrics';
 import ArbitrageChart from '@/components/ArbitrageChart';
 import ConfigurationModal from '@/components/ConfigurationModal';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, Percent, Clock, Activity, TrendingUp, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DollarSign, Percent, Clock, Activity, TrendingUp, BarChart3, RefreshCw } from 'lucide-react';
 
 type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';
 
+// 🔥 DADOS 100% REAIS - Sistema ADK-Arbitragem
 export default function HomePage() {
   const [botStatus, setBotStatus] = useState<BotStatus>('IDLE');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   
-  // Mock data for dashboard
-  const [metrics] = useState([
+  // 📊 BUSCAR OPORTUNIDADES DE ARBITRAGEM REAIS (Atualização a cada 5 segundos)
+  const { data: opportunities = [], isLoading: loadingOpportunities, refetch: refetchOpportunities } = useQuery({
+    queryKey: ['/api/arbitrage/opportunities'],
+    refetchInterval: 5000, // Atualização automática a cada 5 segundos
+    staleTime: 2000,
+  });
+
+  // 📊 BUSCAR STATUS REAL DO BOT
+  const { data: botData = {}, isLoading: loadingBot } = useQuery({
+    queryKey: ['/api/status'],
+    refetchInterval: 3000,
+    staleTime: 1000,
+  });
+
+  // 📊 BUSCAR TRADES REAIS
+  const { data: trades = [], isLoading: loadingTrades } = useQuery({
+    queryKey: ['/api/trades'],
+    refetchInterval: 10000,
+    staleTime: 5000,
+  });
+  // 🔥 PROCESSAMENTO DE DADOS REAIS APENAS
+  const opportunitiesArray = Array.isArray(opportunities) ? opportunities : [];
+  const tradesArray = Array.isArray(trades) ? trades : [];
+  const botDataTyped = botData as { activeTrades?: number; todayTrades?: number; pairs?: string[] } || {};
+  
+  const topOpportunities = opportunitiesArray
+    .sort((a: any, b: any) => Math.abs(b.basisPercent) - Math.abs(a.basisPercent))
+    .slice(0, 30); // Top 30 melhores oportunidades
+
+  const currentAnalyzingPair = topOpportunities[0]?.symbol || 'Analisando...';
+  const avgBasis = topOpportunities.length > 0 
+    ? topOpportunities.reduce((sum: number, opp: any) => sum + Math.abs(opp.basisPercent), 0) / topOpportunities.length
+    : 0;
+
+  // Calcular métricas reais baseadas nos dados da API
+  const realMetrics = [
     {
-      id: 'total-pnl',
-      title: 'P&L Total',
-      value: '$2,847.50',
-      change: 12.5,
-      changeType: 'positive' as const,
-      icon: <DollarSign className="w-4 h-4" />,
-      description: 'hoje'
+      id: 'current-opportunities',
+      title: 'Oportunidades Ativas',
+      value: topOpportunities.length,
+      icon: <Activity className="w-4 h-4" />,
+      description: 'detectadas agora'
     },
     {
-      id: 'basis-pct',
-      title: 'Base Atual',
-      value: '0.0045%',
-      change: -0.2,
-      changeType: 'negative' as const,
+      id: 'current-analyzing',
+      title: 'Analisando Agora',
+      value: currentAnalyzingPair,
+      icon: <BarChart3 className="w-4 h-4" />,
+      description: 'par atual'
+    },
+    {
+      id: 'avg-basis',
+      title: 'Base Média Top 30',
+      value: `${avgBasis.toFixed(4)}%`,
       icon: <Percent className="w-4 h-4" />,
-      description: 'vs média'
+      description: 'melhores oportunidades'
     },
     {
       id: 'active-trades',
       title: 'Trades Ativos',
-      value: 3,
-      icon: <Activity className="w-4 h-4" />,
+      value: botDataTyped.activeTrades || 0,
+      icon: <TrendingUp className="w-4 h-4" />,
     },
     {
       id: 'daily-trades',
       title: 'Trades Hoje',
-      value: 8,
-      change: 20,
-      changeType: 'positive' as const,
-      icon: <BarChart3 className="w-4 h-4" />,
-      description: 'vs ontem'
+      value: botDataTyped.todayTrades || 0,
+      icon: <DollarSign className="w-4 h-4" />,
+      description: 'total do dia'
     },
     {
-      id: 'funding-rate',
-      title: 'Funding Rate',
-      value: '0.0012%',
+      id: 'total-pairs',
+      title: 'Pares Monitorados',
+      value: botDataTyped.pairs?.length || 0,
       icon: <Clock className="w-4 h-4" />,
-    },
-    {
-      id: 'wyckoff-score',
-      title: 'Wyckoff Score',
-      value: '0.65',
-      change: 5.2,
-      changeType: 'positive' as const,
-      icon: <TrendingUp className="w-4 h-4" />,
+      description: 'em análise'
     }
-  ]);
-  
-  // Mock chart data
-  const generateChartData = (baseValue: number, count: number = 24) => {
-    const data: number[] = [];
-    const labels: string[] = [];
-    const now = new Date();
-    
-    for (let i = count - 1; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
-      labels.push(time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
-      
-      const value = baseValue + Math.sin(i / 4) * (baseValue * 0.1) + (Math.random() - 0.5) * (baseValue * 0.05);
-      data.push(Math.max(0, value));
-    }
-    
+  ];
+
+  // Gerar dados de gráfico baseados em oportunidades reais
+  const generateRealChartData = (opportunities: any[]) => {
+    const data = opportunities.slice(0, 24).map((opp: any) => Math.abs(opp.basisPercent));
+    const labels = opportunities.slice(0, 24).map((opp: any) => opp.symbol.replace('/USDT', ''));
     return { data, labels };
   };
+
+  // Calculate scalar values for time series charts
+  const basisChart = generateRealChartData(topOpportunities);
+  const realTimeChart = {
+    data: topOpportunities.slice(0, 10).map((opp: any) => opp.spotPrice),
+    labels: topOpportunities.slice(0, 10).map((opp: any) => opp.symbol.replace('/USDT', ''))
+  };
   
-  const basisChart = generateChartData(0.004);
-  const fundingChart = generateChartData(0.0012);
-  const wyckoffChart = generateChartData(0.65);
-  const gexChart = generateChartData(0.15);
+  // Calculate streamValue for proper time series
+  const avgBasisValue = basisChart.data.length > 0 
+    ? basisChart.data.reduce((sum, val) => sum + val, 0) / basisChart.data.length 
+    : 0;
+    
+  const avgSpotValue = realTimeChart.data.length > 0 
+    ? realTimeChart.data.reduce((sum, val) => sum + val, 0) / realTimeChart.data.length 
+    : 0;
+    
+  const btcBasis = Math.abs(topOpportunities.find((opp: any) => opp.symbol?.includes('BTC'))?.basisPercent || 0);
+  const ethBasis = Math.abs(topOpportunities.find((opp: any) => opp.symbol?.includes('ETH'))?.basisPercent || 0);
+  const btcEthDifference = Math.abs(btcBasis - ethBasis);
+  
+  const avgPotentialProfit = topOpportunities.length > 0
+    ? topOpportunities.slice(0, 10).reduce((sum: number, opp: any) => sum + (opp.potentialProfit || 0), 0) / Math.min(10, topOpportunities.length)
+    : 0;
   
   const handleStart = () => {
     console.log('Bot iniciado');
@@ -143,89 +182,191 @@ export default function HomePage() {
       
       {/* Main Content */}
       <main className="container mx-auto px-6 py-6 space-y-6">
-        {/* Metrics Dashboard */}
+        {/* 🔥 SEÇÃO DE DIFERENÇAS DE PREÇOS EM TEMPO REAL */}
         <section>
-          <h2 className="text-lg font-semibold mb-4">Métricas em Tempo Real</h2>
-          <DashboardMetrics metrics={metrics} />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Diferenças de Preços Spot ↔ Futuros (REAL TIME)</h2>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refetchOpportunities()} 
+                disabled={loadingOpportunities}
+                data-testid="button-refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingOpportunities ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+              <Badge variant="outline" className="text-xs">
+                🔄 Auto: 5s
+              </Badge>
+            </div>
+          </div>
+          
+          {loadingOpportunities ? (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                <p className="text-muted-foreground">Carregando oportunidades reais...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {topOpportunities.map((opportunity: any, index: number) => (
+                <Card key={opportunity.symbol} className="hover-elevate" data-testid={`opportunity-${opportunity.symbol}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant={index < 5 ? 'default' : 'outline'}>
+                        {opportunity.symbol}
+                      </Badge>
+                      <Badge variant={opportunity.basisPercent > 0 ? 'default' : 'destructive'} className="text-xs">
+                        #{index + 1}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Spot:</span>
+                        <span className="font-mono">${opportunity.spotPrice?.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Futuros:</span>
+                        <span className="font-mono">${opportunity.futuresPrice?.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-semibold">
+                        <span>Diferença:</span>
+                        <span className={`font-mono ${
+                          opportunity.basisPercent > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {opportunity.basisPercent > 0 ? '+' : ''}{opportunity.basisPercent?.toFixed(4)}%
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          Lucro Est.: {opportunity.potentialProfit?.toFixed(4)}%
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </section>
         
-        {/* Charts Grid */}
+        {/* Métricas Dashboard - DADOS REAIS */}
         <section>
-          <h2 className="text-lg font-semibold mb-4">Análises e Gráficos</h2>
+          <h2 className="text-lg font-semibold mb-4">Métricas do Sistema (Dados Reais)</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {realMetrics.map((metric) => (
+              <Card key={metric.id} className="hover-elevate" data-testid={`metric-${metric.id}`}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {metric.title}
+                  </CardTitle>
+                  {metric.icon}
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{metric.value}</div>
+                  {metric.description && (
+                    <p className="text-xs text-muted-foreground">
+                      {metric.description}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+        
+        {/* Gráficos Dinâmicos com Dados Reais */}
+        <section>
+          <h2 className="text-lg font-semibold mb-4">Gráficos em Tempo Real - Sistema ADK-Arbitragem</h2>
           <div className="grid gap-6 lg:grid-cols-2">
             <ArbitrageChart
               type="basis"
-              title="Base Spot-Futuros"
+              title={`Base dos Top ${Math.min(topOpportunities.length, 24)} Pares`}
               data={basisChart.data}
               labels={basisChart.labels}
+              streamValue={avgBasisValue}
+              isLive={true}
+              lastUpdate={topOpportunities[0]?.lastUpdate || new Date().toLocaleTimeString('pt-BR')}
             />
             
             <ArbitrageChart
               type="funding"
-              title="Funding Rate"
-              data={fundingChart.data}
-              labels={fundingChart.labels}
+              title="Preços Spot - Top 10 Ativos"
+              data={realTimeChart.data}
+              labels={realTimeChart.labels}
+              streamValue={avgSpotValue}
+              isLive={true}
+              lastUpdate={new Date().toLocaleTimeString('pt-BR')}
             />
             
             <ArbitrageChart
               type="wyckoff"
-              title="Wyckoff Score"
-              data={wyckoffChart.data}
-              labels={wyckoffChart.labels}
+              title="Diferenças % - BTC vs ETH"
+              data={[btcBasis, ethBasis]}
+              labels={['BTC/USDT', 'ETH/USDT']}
+              streamValue={btcEthDifference}
+              isLive={true}
+              lastUpdate={new Date().toLocaleTimeString('pt-BR')}
             />
             
             <ArbitrageChart
-              type="gex"
-              title="GEX/Gamma"
-              data={gexChart.data}
-              labels={gexChart.labels}
+              type="pnl"
+              title="Lucro Potencial Estimado (USD)"
+              data={topOpportunities.slice(0, 10).map((opp: any) => (opp.potentialProfit || 0) * 1000)} // Simular USD
+              labels={topOpportunities.slice(0, 10).map((opp: any) => opp.symbol?.replace('/USDT', '') || '')}
+              streamValue={avgPotentialProfit * 1000}
+              isLive={true}
+              lastUpdate={new Date().toLocaleTimeString('pt-BR')}
             />
           </div>
         </section>
         
-        {/* Trade Log */}
+        {/* Histórico de Trades Reais */}
         <section>
-          <h2 className="text-lg font-semibold mb-4">Histórico de Trades</h2>
+          <h2 className="text-lg font-semibold mb-4">Histórico de Trades (Dados Reais)</h2>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Últimas Operações</CardTitle>
+              <CardTitle className="text-base">Últimas Operações Reais</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {/* Mock trade entries */}
-                <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="default">BTC/USDT</Badge>
-                    <span className="text-sm text-muted-foreground">14:23:45</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm">Base: 0.0042%</span>
-                    <span className="text-sm font-mono text-green-500">+$24.50</span>
-                  </div>
+              {loadingTrades ? (
+                <div className="text-center py-4">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <p className="text-muted-foreground">Carregando trades reais...</p>
                 </div>
-                
-                <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="default">ETH/USDT</Badge>
-                    <span className="text-sm text-muted-foreground">13:45:12</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm">Base: 0.0038%</span>
-                    <span className="text-sm font-mono text-green-500">+$18.75</span>
-                  </div>
+              ) : tradesArray.length > 0 ? (
+                <div className="space-y-3">
+                  {tradesArray.slice(0, 10).map((trade: any) => (
+                    <div key={trade.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="default">{trade.symbol}</Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(trade.timestamp).toLocaleTimeString('pt-BR')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm">Tipo: {trade.type}</span>
+                        <span className={`text-sm font-mono ${
+                          trade.pnl && trade.pnl > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {trade.pnl ? (trade.pnl > 0 ? '+' : '') + '$' + trade.pnl.toFixed(2) : 'Pendente'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                
-                <div className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="default">BTC/USDT</Badge>
-                    <span className="text-sm text-muted-foreground">12:56:30</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm">Base: 0.0041%</span>
-                    <span className="text-sm font-mono text-green-500">+$31.20</span>
-                  </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Activity className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-muted-foreground">Nenhum trade realizado ainda</p>
+                  <p className="text-sm text-muted-foreground mt-1">O sistema detectará oportunidades automaticamente</p>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </section>

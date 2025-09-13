@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { LineChart, BarChart3, Activity, TrendingUp } from 'lucide-react';
+import { LineChart, BarChart3, Activity, TrendingUp, Radio } from 'lucide-react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -36,6 +36,9 @@ interface ArbitrageChartProps {
   data: number[];
   labels: string[];
   className?: string;
+  isLive?: boolean;
+  lastUpdate?: string;
+  streamValue?: number; // Single scalar value for time series (optional)
 }
 
 const chartConfigs = {
@@ -71,23 +74,72 @@ const chartConfigs = {
   }
 };
 
-export default function ArbitrageChart({ type, title, data, labels, className }: ArbitrageChartProps) {
+export default function ArbitrageChart({ type, title, data, labels, className, isLive = true, lastUpdate, streamValue }: ArbitrageChartProps) {
   const [timeframe, setTimeframe] = useState<'1h' | '4h' | '1d'>('1h');
+  const [historicalData, setHistoricalData] = useState<number[][]>([]);
+  const [historicalLabels, setHistoricalLabels] = useState<string[][]>([]);
+  const chartRef = useRef<any>(null);
   const config = chartConfigs[type];
   
+  // 🔥 SISTEMA DE HISTÓRICO TEMPORAL PARA GRÁFICOS DINÂMICOS
+  useEffect(() => {
+    if (data.length > 0 || streamValue !== undefined) {
+      const now = new Date();
+      const currentTime = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      
+      // Calculate current value: use streamValue if provided, else aggregate data
+      const currentValue = streamValue !== undefined 
+        ? streamValue
+        : data.length > 0 
+          ? data.reduce((sum, val) => sum + val, 0) / data.length // Average of data array
+          : 0;
+      
+      setHistoricalData(prev => {
+        const newHistory = [...prev];
+        // Only use real data - no simulation/initialization
+        const currentData = [...(newHistory[0] || [])];
+        if (currentValue !== undefined && currentValue !== 0) {
+          currentData.push(currentValue);
+          if (currentData.length > 20) currentData.shift();
+          newHistory[0] = currentData;
+        }
+        return newHistory;
+      });
+      
+      setHistoricalLabels(prev => {
+        const newHistory = [...prev];
+        // Only use real timestamps - no simulation
+        const currentLabels = [...(newHistory[0] || [])];
+        if (currentValue !== undefined && currentValue !== 0) {
+          currentLabels.push(currentTime);
+          if (currentLabels.length > 20) currentLabels.shift();
+          newHistory[0] = currentLabels;
+        }
+        return newHistory;
+      });
+    }
+  }, [data, streamValue]);
+  
+  // Usar dados históricos temporais para criar gráfico dinâmico
+  const currentData = historicalData[0] || data;
+  const currentLabels = historicalLabels[0] || labels;
+  
   const chartData = {
-    labels,
+    labels: currentLabels,
     datasets: [
       {
         label: title,
-        data,
+        data: currentData,
         borderColor: config.color,
         backgroundColor: config.backgroundColor,
-        borderWidth: 2,
+        borderWidth: 3,
         fill: true,
-        tension: 0.1,
-        pointRadius: 2,
-        pointHoverRadius: 4
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointBackgroundColor: config.color,
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2
       }
     ]
   };
@@ -95,6 +147,10 @@ export default function ArbitrageChart({ type, title, data, labels, className }:
   const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: {
+      duration: 750,
+      easing: 'easeInOutQuart'
+    },
     plugins: {
       legend: {
         display: false
@@ -102,41 +158,53 @@ export default function ArbitrageChart({ type, title, data, labels, className }:
       tooltip: {
         mode: 'index',
         intersect: false,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        titleColor: 'white',
-        bodyColor: 'white',
+        backgroundColor: 'hsl(var(--popover))',
+        titleColor: 'hsl(var(--popover-foreground))',
+        bodyColor: 'hsl(var(--popover-foreground))',
         borderColor: config.color,
-        borderWidth: 1
+        borderWidth: 2,
+        cornerRadius: 8,
+        displayColors: true,
+        callbacks: {
+          label: function(context) {
+            return `${title}: ${context.parsed.y.toFixed(4)}${config.unit}`;
+          }
+        }
       }
     },
     scales: {
       x: {
         display: true,
         grid: {
-          display: false
+          display: true,
+          color: 'hsl(var(--border) / 0.2)',
+          lineWidth: 1
         },
         ticks: {
-          color: 'hsl(var(--foreground) / 0.7)',
-          maxTicksLimit: 6,
+          color: 'hsl(var(--muted-foreground))',
+          maxTicksLimit: 8,
           font: {
-            size: 12
+            size: 11,
+            family: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
           }
         }
       },
       y: {
         display: true,
         grid: {
-          color: 'hsl(var(--border) / 0.3)',
+          color: 'hsl(var(--border) / 0.4)',
           display: true,
           lineWidth: 1
         },
         ticks: {
-          color: 'hsl(var(--foreground) / 0.7)',
+          color: 'hsl(var(--muted-foreground))',
           font: {
-            size: 12
+            size: 11,
+            family: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
           },
           callback: function(value) {
-            return `${value}${config.unit}`;
+            const num = typeof value === 'number' ? value : 0;
+            return `${num.toFixed(4)}${config.unit}`;
           }
         }
       }
@@ -148,8 +216,8 @@ export default function ArbitrageChart({ type, title, data, labels, className }:
     }
   };
   
-  const currentValue = data[data.length - 1] || 0;
-  const previousValue = data[data.length - 2] || 0;
+  const currentValue = currentData[currentData.length - 1] || 0;
+  const previousValue = currentData[currentData.length - 2] || 0;
   const change = currentValue - previousValue;
   const changePercent = previousValue !== 0 ? ((change / previousValue) * 100) : 0;
   
@@ -159,10 +227,18 @@ export default function ArbitrageChart({ type, title, data, labels, className }:
         <div className="flex items-center gap-2">
           {config.icon}
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
+          {isLive && (
+            <div className="flex items-center gap-1">
+              <Radio className="w-3 h-3 text-destructive animate-pulse" />
+              <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">
+                LIVE
+              </Badge>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 text-right">
-            <span className="text-2xl font-mono font-bold">
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-mono font-bold text-foreground">
               {currentValue.toFixed(type === 'pnl' ? 2 : 4)}{config.unit}
             </span>
             {change !== 0 && (
@@ -171,6 +247,11 @@ export default function ArbitrageChart({ type, title, data, labels, className }:
               </Badge>
             )}
           </div>
+          {lastUpdate && (
+            <p className="text-xs text-muted-foreground font-mono">
+              Última: {lastUpdate}
+            </p>
+          )}
         </div>
       </CardHeader>
       <CardContent>

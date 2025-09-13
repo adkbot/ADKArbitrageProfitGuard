@@ -65,13 +65,25 @@ export class AnalysisEngine {
     const config = await this.storage.getBotConfig();
     if (!config || !config.arbitrageEnabled) return;
 
-    console.log('📊 Executando análise automática...');
+    console.log('📊 Executando análise automática com atualização de scores...');
     
     const signals: ArbitrageSignal[] = [];
+    const scoreUpdates = [];
     
+    // 🔄 ANÁLISE DE TODOS OS PARES PARA ATUALIZAR SCORES DIÁRIOS
     for (const pair of config.pairs) {
       try {
-        const signal = await this.analyzeSymbol(pair, config);
+        const marketData = await this.exchangeAPI.getMarketData(pair);
+        
+        // 📊 SEMPRE ATUALIZAR SCORE INDEPENDENTE DO THRESHOLD
+        scoreUpdates.push(this.storage.updatePairPerformanceScore(pair, {
+          basisPercent: marketData.basisPercent,
+          volume24h: marketData.volume24h || 0,
+          fundingRate: marketData.fundingRate || 0
+        }));
+        
+        // 🎯 VERIFICAR SE É OPORTUNIDADE DE TRADING
+        const signal = await this.analyzeSymbol(pair, config, marketData);
         if (signal) {
           signals.push(signal);
         }
@@ -79,6 +91,9 @@ export class AnalysisEngine {
         console.error(`Erro analisando ${pair}:`, error);
       }
     }
+    
+    // Aguardar todas as atualizações de score
+    await Promise.all(scoreUpdates);
 
     // Salvar sinais encontrados
     if (signals.length > 0) {
@@ -92,30 +107,36 @@ export class AnalysisEngine {
     }
   }
 
-  private async analyzeSymbol(symbol: string, config: any): Promise<ArbitrageSignal | null> {
+  private async analyzeSymbol(symbol: string, config: any, marketData?: any): Promise<ArbitrageSignal | null> {
     try {
-      // Obter dados de mercado em tempo real
-      const marketData = await this.exchangeAPI.getMarketData(symbol);
+      // Usar dados já obtidos ou buscar novos
+      const data = marketData || await this.exchangeAPI.getMarketData(symbol);
       
       // Calcular Wyckoff
       const wyckoffPhase = await this.calculateWyckoff(symbol);
       
-      // Verificar se atende critérios de entrada
-      const basisThreshold = parseFloat(config.basisEntry);
-      const basisAbs = Math.abs(marketData.basisPercent);
+      // 💰 CALCULAR LUCRO LÍQUIDO REAL (DESCONTANDO TODOS OS CUSTOS)
+      const basisAbs = Math.abs(data.basisPercent);
+      const tradingFees = 0.04; // 0.02% cada lado
+      const slippage = parseFloat(config.slippageK) * 100;
+      const funding = Math.abs(data.fundingRate || 0) * 8; // 8h funding
+      const netProfit = basisAbs - tradingFees - slippage - funding;
       
-      if (basisAbs >= basisThreshold) {
+      // Verificar se atende critérios de entrada baseado em LUCRO LÍQUIDO
+      const basisThreshold = parseFloat(config.basisEntry);
+      
+      if (netProfit >= basisThreshold) {
         const signal: ArbitrageSignal = {
           symbol,
-          spotPrice: marketData.spotPrice,
-          futuresPrice: marketData.futuresPrice,
-          basisPercent: marketData.basisPercent,
-          signal: marketData.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
-          confidence: Math.min(100, (basisAbs / basisThreshold) * 100),
-          profitPotential: basisAbs - basisThreshold,
+          spotPrice: data.spotPrice,
+          futuresPrice: data.futuresPrice,
+          basisPercent: data.basisPercent,
+          signal: data.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
+          confidence: Math.min(100, (netProfit / basisThreshold) * 100),
+          profitPotential: netProfit, // USAR LUCRO LÍQUIDO
           wyckoffPhase,
-          volume24h: marketData.volume24h,
-          funding: marketData.funding || 0,
+          volume24h: data.volume24h || 0,
+          funding: data.fundingRate || 0,
           timestamp: new Date().toISOString()
         };
 
@@ -257,6 +278,30 @@ export class AnalysisEngine {
 
   private async logTradeExit(trade: any, signal: ArbitrageSignal): Promise<void> {
     console.log(`📤 Saída registrada: ${trade.symbol} - ${signal.basisPercent.toFixed(3)}%`);
+  }
+
+  // 📊 ANÁLISE ÚNICA PARA ATUALIZAR TODOS OS SCORES SEM RESTRIÇÃO
+  async updateAllPairScores(): Promise<void> {
+    const config = await this.storage.getBotConfig();
+    if (!config) return;
+    
+    console.log('🔄 Atualizando scores de performance para todos os pares...');
+    
+    const updates = config.pairs.map(async (pair) => {
+      try {
+        const marketData = await this.exchangeAPI.getMarketData(pair);
+        await this.storage.updatePairPerformanceScore(pair, {
+          basisPercent: marketData.basisPercent,
+          volume24h: marketData.volume24h || 0,
+          fundingRate: marketData.fundingRate || 0
+        });
+      } catch (error) {
+        console.error(`Erro atualizando score para ${pair}:`, error);
+      }
+    });
+    
+    await Promise.all(updates);
+    console.log('✅ Scores de performance atualizados para todos os pares');
   }
 
   // Método para obter status atual da análise
