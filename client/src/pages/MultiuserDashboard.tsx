@@ -220,46 +220,46 @@ export default function MultiuserDashboard() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className=\"w-full max-w-md\">
-          <CardHeader className=\"text-center\">
-            <CardTitle className=\"text-2xl\">ADK Arbitragem</CardTitle>
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">ADK Arbitragem</CardTitle>
             <CardDescription>Sistema Multiusuário de Arbitragem Spot-Futures</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className=\"space-y-4\">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <Label htmlFor=\"userId\">ID do Usuário</Label>
+                <Label htmlFor="userId">ID do Usuário</Label>
                 <Input
-                  id=\"userId\"
-                  data-testid=\"input-user-id\"
+                  id="userId\"
+                  data-testid="input-user-id\"
                   value={loginForm.userId}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, userId: e.target.value }))}
-                  placeholder=\"meu_usuario\"
+                  placeholder="meu_usuario\"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor=\"password\">Senha (opcional)</Label>
+                <Label htmlFor="password">Senha (opcional)</Label>
                 <Input
-                  id=\"password\"
-                  type=\"password\"
-                  data-testid=\"input-password\"
+                  id="password\"
+                  type="password\"
+                  data-testid="input-password\"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  placeholder=\"senha_opcional\"
+                  placeholder="senha_opcional\"
                 />
               </div>
               {error && (
-                <Alert variant=\"destructive\">
-                  <AlertCircle className=\"h-4 w-4\" />
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4\" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
               <Button 
-                type=\"submit\" 
-                className=\"w-full\" 
+                type="submit" 
+                className="w-full" 
                 disabled={isLoading}
-                data-testid=\"button-login\"
+                data-testid="button-login"
               >
                 {isLoading ? 'Entrando...' : 'Entrar / Registrar'}
               </Button>
@@ -272,35 +272,35 @@ export default function MultiuserDashboard() {
 
   // Dashboard screen
   return (
-    <div className=\"min-h-screen bg-gray-50 p-4\">
-      <div className=\"max-w-6xl mx-auto space-y-6\">
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className=\"flex items-center justify-between\">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className=\"text-3xl font-bold\">ADK Arbitragem</h1>
-            <p className=\"text-gray-600\">Bem-vindo, {user.name}</p>
+            <h1 className="text-3xl font-bold">ADK Arbitragem</h1>
+            <p className="text-gray-600">Bem-vindo, {user.name}</p>
           </div>
-          <Button variant=\"outline\" onClick={logout} data-testid=\"button-logout\">
-            <User className=\"h-4 w-4 mr-2\" />
+          <Button variant="outline" onClick={logout} data-testid="button-logout">
+            <User className="h-4 w-4 mr-2" />
             Sair
           </Button>
         </div>
 
         {/* Status Cards */}
         {status && (
-          <div className=\"grid grid-cols-1 md:grid-cols-3 gap-4\">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
-              <CardHeader className=\"flex flex-row items-center justify-between space-y-0 pb-2\">
-                <CardTitle className=\"text-sm font-medium\">Status do Bot</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Status do Bot</CardTitle>
                 <Badge variant={status.bot.enabled ? 'default' : 'secondary'}>
                   {status.bot.enabled ? 'Ativo' : 'Inativo'}
                 </Badge>
               </CardHeader>
               <CardContent>
-                <div className=\"text-2xl font-bold\">
+                <div className="text-2xl font-bold">
                   {status.bot.executing ? 'Executando' : 'Aguardando'}
                 </div>
-                <p className=\"text-xs text-muted-foreground\">
+                <p className="text-xs text-muted-foreground">
                   Última análise: {status.bot.lastAnalysis ? 
                     new Date(status.bot.lastAnalysis).toLocaleTimeString() : 'Nunca'}
                 </p>
@@ -308,28 +308,28 @@ export default function MultiuserDashboard() {
             </Card>
 
             <Card>
-              <CardHeader className=\"flex flex-row items-center justify-between space-y-0 pb-2\">
-                <CardTitle className=\"text-sm font-medium\">Trades Hoje</CardTitle>
-                <TrendingUp className=\"h-4 w-4 text-muted-foreground\" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Trades Hoje</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground\" />
               </CardHeader>
               <CardContent>
-                <div className=\"text-2xl font-bold\">{status.trades.today}</div>
-                <p className=\"text-xs text-muted-foreground\">
+                <div className="text-2xl font-bold">{status.trades.today}</div>
+                <p className="text-xs text-muted-foreground">
                   Restantes: {status.limits.remainingToday}
                 </p>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className=\"flex flex-row items-center justify-between space-y-0 pb-2\">
-                <CardTitle className=\"text-sm font-medium\">Lucro Hoje</CardTitle>
-                <Wallet className=\"h-4 w-4 text-muted-foreground\" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Lucro Hoje</CardTitle>
+                <Wallet className="h-4 w-4 text-muted-foreground\" />
               </CardHeader>
               <CardContent>
-                <div className=\"text-2xl font-bold text-green-600\">
+                <div className="text-2xl font-bold text-green-600">
                   ${status.trades.profitToday.toFixed(2)}
                 </div>
-                <p className=\"text-xs text-muted-foreground\">
+                <p className="text-xs text-muted-foreground">
                   Total: ${status.trades.profitTotal.toFixed(2)}
                 </p>
               </CardContent>
@@ -338,15 +338,15 @@ export default function MultiuserDashboard() {
         )}
 
         {/* Main Content */}
-        <Tabs defaultValue=\"control\" className=\"space-y-4\">
+        <Tabs defaultValue=\"control\" className="space-y-4">
           <TabsList>
-            <TabsTrigger value=\"control\" data-testid=\"tab-control\">Controle</TabsTrigger>
-            <TabsTrigger value=\"config\" data-testid=\"tab-config\">Configurações</TabsTrigger>
-            <TabsTrigger value=\"trades\" data-testid=\"tab-trades\">Trades</TabsTrigger>
+            <TabsTrigger value="control\" data-testid="tab-control">Controle</TabsTrigger>
+            <TabsTrigger value="config\" data-testid="tab-config">Configurações</TabsTrigger>
+            <TabsTrigger value="trades\" data-testid="tab-trades">Trades</TabsTrigger>
           </TabsList>
 
           {/* Control Tab */}
-          <TabsContent value=\"control\">
+          <TabsContent value="control">
             <Card>
               <CardHeader>
                 <CardTitle>Controle do Bot</CardTitle>
@@ -354,38 +354,38 @@ export default function MultiuserDashboard() {
                   Gerencie a execução do seu bot de arbitragem
                 </CardDescription>
               </CardHeader>
-              <CardContent className=\"space-y-4\">
-                <div className=\"flex space-x-4\">
+              <CardContent className="space-y-4">
+                <div className="flex space-x-4">
                   <Button
                     onClick={() => handleBotAction('start')}
                     disabled={isLoading || (status?.bot.enabled ?? false)}
-                    data-testid=\"button-start-bot\"
+                    data-testid="button-start-bot\"
                   >
-                    <Play className=\"h-4 w-4 mr-2\" />
+                    <Play className="h-4 w-4 mr-2" />
                     Iniciar Bot
                   </Button>
                   <Button
-                    variant=\"outline\"
+                    variant="outline"
                     onClick={() => handleBotAction('stop')}
                     disabled={isLoading || !(status?.bot.enabled ?? false)}
-                    data-testid=\"button-stop-bot\"
+                    data-testid="button-stop-bot\"
                   >
-                    <Square className=\"h-4 w-4 mr-2\" />
+                    <Square className="h-4 w-4 mr-2" />
                     Parar Bot
                   </Button>
                 </div>
                 
                 {status && (
-                  <div className=\"space-y-2\">
-                    <div className=\"flex justify-between\">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
                       <span>Trades ativos:</span>
                       <span>{status.trades.active}</span>
                     </div>
-                    <div className=\"flex justify-between\">
+                    <div className="flex justify-between">
                       <span>Valor máximo por trade:</span>
                       <span>${status.limits.maxTradeAmount}</span>
                     </div>
-                    <div className=\"flex justify-between\">
+                    <div className="flex justify-between">
                       <span>Limite diário:</span>
                       <span>{status.limits.maxDailyTrades} trades</span>
                     </div>
@@ -396,7 +396,7 @@ export default function MultiuserDashboard() {
           </TabsContent>
 
           {/* Config Tab */}
-          <TabsContent value=\"config\">
+          <TabsContent value="config">
             <Card>
               <CardHeader>
                 <CardTitle>Configurações</CardTitle>
@@ -405,44 +405,44 @@ export default function MultiuserDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleConfigSave} className=\"space-y-4\">
+                <form onSubmit={handleConfigSave} className="space-y-4">
                   <div>
-                    <Label htmlFor=\"apiKey\">Binance API Key</Label>
+                    <Label htmlFor="apiKey">Binance API Key</Label>
                     <Input
-                      id=\"apiKey\"
-                      data-testid=\"input-api-key\"
+                      id="apiKey\"
+                      data-testid="input-api-key\"
                       value={configForm.binanceApiKey}
                       onChange={(e) => setConfigForm(prev => ({ ...prev, binanceApiKey: e.target.value }))}
-                      placeholder=\"Sua API Key da Binance\"
+                      placeholder="Sua API Key da Binance\"
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor=\"secretKey\">Binance Secret Key</Label>
+                    <Label htmlFor="secretKey">Binance Secret Key</Label>
                     <Input
-                      id=\"secretKey\"
-                      type=\"password\"
-                      data-testid=\"input-secret-key\"
+                      id="secretKey\"
+                      type="password\"
+                      data-testid="input-secret-key\"
                       value={configForm.binanceSecretKey}
                       onChange={(e) => setConfigForm(prev => ({ ...prev, binanceSecretKey: e.target.value }))}
-                      placeholder=\"Sua Secret Key da Binance\"
+                      placeholder="Sua Secret Key da Binance\"
                       required
                     />
                   </div>
                   <div>
-                    <Label htmlFor=\"maxAmount\">Valor Máximo por Trade ($)</Label>
+                    <Label htmlFor="maxAmount">Valor Máximo por Trade ($)</Label>
                     <Input
-                      id=\"maxAmount\"
-                      type=\"number\"
-                      data-testid=\"input-max-amount\"
+                      id="maxAmount\"
+                      type="number\"
+                      data-testid="input-max-amount\"
                       value={configForm.maxTradeAmount}
                       onChange={(e) => setConfigForm(prev => ({ ...prev, maxTradeAmount: parseInt(e.target.value) }))}
-                      min=\"10\"
-                      max=\"10000\"
+                      min="10\"
+                      max="10000\"
                     />
                   </div>
-                  <Button type=\"submit\" disabled={isLoading} data-testid=\"button-save-config\">
-                    <Settings className=\"h-4 w-4 mr-2\" />
+                  <Button type="submit" disabled={isLoading} data-testid="button-save-config">
+                    <Settings className="h-4 w-4 mr-2" />
                     {isLoading ? 'Salvando...' : 'Salvar Configuração'}
                   </Button>
                 </form>
@@ -451,7 +451,7 @@ export default function MultiuserDashboard() {
           </TabsContent>
 
           {/* Trades Tab */}
-          <TabsContent value=\"trades\">
+          <TabsContent value="trades">
             <Card>
               <CardHeader>
                 <CardTitle>Histórico de Trades</CardTitle>
@@ -461,10 +461,10 @@ export default function MultiuserDashboard() {
               </CardHeader>
               <CardContent>
                 {status?.trades.active.length ? (
-                  <div className=\"space-y-2\">
+                  <div className="space-y-2">
                     {status.trades.active.map((trade: any, index: number) => (
-                      <div key={index} className=\"border rounded p-3\">
-                        <div className=\"flex justify-between\">
+                      <div key={index} className="border rounded p-3">
+                        <div className="flex justify-between">
                           <span>{trade.symbol || 'N/A'}</span>
                           <Badge>{trade.status || 'Ativo'}</Badge>
                         </div>
@@ -472,7 +472,7 @@ export default function MultiuserDashboard() {
                     ))}
                   </div>
                 ) : (
-                  <p className=\"text-center text-gray-500 py-8\">
+                  <p className="text-center text-gray-500 py-8">
                     Nenhum trade ativo no momento
                   </p>
                 )}
