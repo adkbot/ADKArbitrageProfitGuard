@@ -2,6 +2,7 @@
 // Baseado na recomendação "colar e rodar" - proxy opcional via PROXY_URL
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import ccxt from 'ccxt';
+import { http } from './http-client.js';
 
 // 🔧 CONFIGURAÇÃO SIMPLES - apenas PROXY_URL opcional
 const { PROXY_URL, BINANCE_API_KEY, BINANCE_SECRET_KEY } = process.env;
@@ -87,32 +88,33 @@ export function makeFuturesExchange() {
 }
 
 /**
- * 🌐 FETCH PERSONALIZADO COM PROXY OPCIONAL
- * - Usa proxy se PROXY_URL definido
- * - Conexão direta caso contrário
+ * 🚨 FETCH COM KILL-SWITCH AUTOMÁTICO
+ * - Usa axios com interceptors para detectar bloqueio geográfico  
+ * - Kill-switch automático em HTTP 451/403
+ * - Proxy opcional via PROXY_URL
  */
 export async function makeFetch(url, options = {}) {
-  const agent = makeAgent();
+  console.log('🌐 Proxied fetch:', url.length > 60 ? url.substring(0, 60) + '...' : url);
   
-  const fetchOptions = {
-    ...options,
+  const agent = makeAgent();
+  const axiosConfig = {
+    url,
+    method: options.method || 'GET',
     timeout: 10000,
+    ...options,
+    httpsAgent: agent,
+    httpAgent: agent
   };
   
-  // 🌐 APLICAR PROXY AGENT SE DISPONÍVEL (Node.js específico)
-  if (agent) {
-    // @ts-ignore - Node.js specific agent option
-    fetchOptions.agent = agent;
-  }
-  
   try {
-    const response = await fetch(url, fetchOptions);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    return response;
+    const response = await http(axiosConfig);
+    return {
+      ok: response.status >= 200 && response.status < 300,
+      status: response.status,
+      statusText: response.statusText,
+      json: () => Promise.resolve(response.data),
+      text: () => Promise.resolve(typeof response.data === 'string' ? response.data : JSON.stringify(response.data))
+    };
   } catch (error) {
     console.error(`❌ Net: Fetch error for ${redactUrl(url)}:`, error.message);
     throw error;

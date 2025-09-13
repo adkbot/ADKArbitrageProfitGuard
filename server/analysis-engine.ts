@@ -69,6 +69,13 @@ export class AnalysisEngine {
   }
 
   private async runAnalysis(): Promise<void> {
+    // 🚨 VERIFICAR KILL-SWITCH AUTOMÁTICO
+    if (process.env.ARBITRAGE_ENABLED === "false") {
+      console.error('🚨 SISTEMA PARADO - Kill-switch ativado por bloqueio geográfico!');
+      this.stop();
+      return;
+    }
+    
     const config = await this.storage.getBotConfig();
     if (!config || !config.arbitrageEnabled) return;
 
