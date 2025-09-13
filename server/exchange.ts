@@ -3,6 +3,7 @@
 
 import WebSocket from 'ws';
 import { makeSpotExchange, makeFuturesExchange, makeFetch, getNetworkStatus } from './net.js';
+import { fetchWithKillSwitch } from './exchange-manager.js';
 
 export interface MarketData {
   symbol: string;

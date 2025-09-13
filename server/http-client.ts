@@ -1,7 +1,29 @@
 // 🚨 HTTP CLIENT COM KILL-SWITCH AUTOMÁTICO PARA BLOQUEIO GEOGRÁFICO
 import axios from "axios";
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
-export const http = axios.create({ timeout: 7000 });
+// 🌐 CRIAR AXIOS COM PROXY CONDICIONAL
+const createHttpClient = () => {
+  const config = { timeout: 7000 };
+  
+  // 🔧 APLICAR PROXY SE DISPONÍVEL
+  const { PROXY_URL } = process.env;
+  if (PROXY_URL && PROXY_URL.trim() !== '') {
+    try {
+      console.log('🔧 Configurando axios com proxy...');
+      config.httpsAgent = new HttpsProxyAgent(PROXY_URL);
+      config.httpAgent = new HttpsProxyAgent(PROXY_URL);
+    } catch (error) {
+      console.error('❌ Erro configurando proxy:', error.message);
+    }
+  } else {
+    console.log('🌐 Axios configurado para conexão DIRETA');
+  }
+  
+  return axios.create(config);
+};
+
+export const http = createHttpClient();
 
 http.interceptors.response.use(
   r => r,

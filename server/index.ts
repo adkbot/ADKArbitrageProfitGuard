@@ -41,7 +41,7 @@ app.use((req, res, next) => {
 // 🌐 INITIALIZE GLOBAL PROXY SYSTEM BEFORE ANY NETWORK CALLS
 async function startServer() {
   // Initialize global proxy system first
-  await initializeProxy();
+  // await initializeProxy(); // DESABILITADO - usar PROXY_URL se necessário
   
   console.log('🚀 Starting server with proxy configuration...');
   const server = await registerRoutes(app);

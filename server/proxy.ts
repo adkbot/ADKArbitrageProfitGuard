@@ -25,17 +25,10 @@ let currentHttpsAgent: any = null;
 let wsProxyAgent: any = null;
 let originalFetch: typeof fetch;
 
-// 🔥 MULTIPLE HIGH-QUALITY PROXY FALLBACKS FOR RELIABILITY
+// 🔥 LISTA DE PROXIES - APENAS URLS REAIS (USUÁRIO DEVE CONFIGURAR)
 const RELIABLE_PROXY_FALLBACKS = [
-  // Public HTTP proxies for testing (users should add their own reliable proxies)
-  'http://proxy.server:3128',
-  'http://free-proxy.cz:3128',
-  'http://proxy.tooling.io:8080',
-  'http://proxy-server.net:3128',
-  'http://public-proxy.com:8080',
-  // SOCKS5 proxies
-  'socks5://proxy.socks:1080',
-  'socks5://socks-proxy.net:1080'
+  // LISTA VAZIA - usuário deve configurar PROXY_URL se necessário
+  // Exemplo: 'http://meu-proxy-real:3128'
 ];
 
 // 🛡️ GLOBAL HTTP AGENTS FOR ALL NETWORK CALLS
