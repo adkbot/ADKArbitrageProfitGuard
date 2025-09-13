@@ -74,35 +74,49 @@ export class ExchangeAPI {
 
   async getSpotPrice(symbol: string): Promise<number> {
     try {
-      // Use dados simulados reais para demonstração
-      return this.getSimulatedPrice(symbol);
+      // Usar dados reais via CoinGecko (funciona sem restrições)
+      const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${this.getCoinGeckoId(symbol)}&vs_currencies=usd`);
+      const data = await response.json();
+      const coinId = this.getCoinGeckoId(symbol);
+      return data[coinId]?.usd || 0;
     } catch (error) {
-      console.error(`Error fetching spot price for ${symbol}:`, error);
-      return this.getSimulatedPrice(symbol);
+      console.error(`Error fetching real spot price for ${symbol}:`, error);
+      // Fallback para endpoint público da Binance
+      try {
+        const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol.replace('/', '')}`);
+        const data = await response.json();
+        return parseFloat(data.price) || 0;
+      } catch (fallbackError) {
+        console.error(`Fallback also failed for ${symbol}:`, fallbackError);
+        return 0;
+      }
     }
   }
 
   async getFuturesPrice(symbol: string): Promise<number> {
     try {
-      // Use dados simulados com variação de basis realística
-      const spotPrice = this.getSimulatedPrice(symbol);
-      const basisVariation = (Math.random() - 0.5) * 0.008; // ±0.4% basis
-      return spotPrice * (1 + basisVariation);
+      // Usar dados reais das futures via endpoint público
+      const binanceSymbol = symbol.replace('/', '');
+      const response = await fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${binanceSymbol}`);
+      const data = await response.json();
+      return parseFloat(data.price) || 0;
     } catch (error) {
-      console.error(`Error fetching futures price for ${symbol}:`, error);
-      const spotPrice = this.getSimulatedPrice(symbol);
-      return spotPrice * 1.002; // Default small premium
+      console.error(`Error fetching real futures price for ${symbol}:`, error);
+      // Usar spot price como fallback
+      const spotPrice = await this.getSpotPrice(symbol);
+      return spotPrice;
     }
   }
 
   async getFundingRate(symbol: string): Promise<number> {
     try {
-      // Convert to futures symbol format
-      const futuresSymbol = this.convertToFuturesSymbol(symbol);
-      const fundingRate = await this.futuresExchange.fetchFundingRate(futuresSymbol);
-      return fundingRate.fundingRate || 0;
+      // Usar dados reais de funding rate via endpoint público
+      const binanceSymbol = symbol.replace('/', '');
+      const response = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${binanceSymbol}`);
+      const data = await response.json();
+      return parseFloat(data.lastFundingRate) || 0;
     } catch (error) {
-      console.error(`Error fetching funding rate for ${symbol}:`, error);
+      console.error(`Error fetching real funding rate for ${symbol}:`, error);
       return 0;
     }
   }
@@ -137,10 +151,13 @@ export class ExchangeAPI {
 
   async get24hVolume(symbol: string): Promise<number> {
     try {
-      const ticker = await this.spotExchange.fetchTicker(symbol);
-      return ticker.quoteVolume || 0;
+      // Usar dados reais de volume via endpoint público
+      const binanceSymbol = symbol.replace('/', '');
+      const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
+      const data = await response.json();
+      return parseFloat(data.quoteVolume) || 0;
     } catch (error) {
-      console.error(`Error fetching 24h volume for ${symbol}:`, error);
+      console.error(`Error fetching real 24h volume for ${symbol}:`, error);
       return 0;
     }
   }
@@ -321,6 +338,80 @@ export class ExchangeAPI {
     this.orderBookCallbacks.clear();
 
     console.log('Exchange API disconnected');
+  }
+
+  // Converter símbolos para IDs do CoinGecko (dados 100% reais)
+  private getCoinGeckoId(symbol: string): string {
+    const mapping: Record<string, string> = {
+      'BTC/USDT': 'bitcoin',
+      'ETH/USDT': 'ethereum',
+      'BNB/USDT': 'binancecoin',
+      'SOL/USDT': 'solana',
+      'ADA/USDT': 'cardano',
+      'AVAX/USDT': 'avalanche-2',
+      'DOT/USDT': 'polkadot',
+      'MATIC/USDT': 'matic-network'
+    };
+    return mapping[symbol] || 'bitcoin';
+  }
+  
+  // Obter saldos reais da carteira
+  async getAccountBalance(): Promise<any> {
+    try {
+      console.log('🏦 Obtendo saldos reais da carteira...');
+      
+      // Saldo da carteira spot
+      const spotBalance = await this.spotExchange.fetchBalance();
+      
+      // Saldo da carteira de futuros
+      const futuresBalance = await this.futuresExchange.fetchBalance();
+      
+      const result = {
+        spot: {
+          USDT: {
+            total: spotBalance.USDT?.total || 0,
+            available: spotBalance.USDT?.free || 0,
+            locked: spotBalance.USDT?.used || 0
+          },
+          BTC: {
+            total: spotBalance.BTC?.total || 0,
+            available: spotBalance.BTC?.free || 0,
+            locked: spotBalance.BTC?.used || 0
+          },
+          ETH: {
+            total: spotBalance.ETH?.total || 0,
+            available: spotBalance.ETH?.free || 0,
+            locked: spotBalance.ETH?.used || 0
+          }
+        },
+        futures: {
+          USDT: {
+            total: futuresBalance.USDT?.total || 0,
+            available: futuresBalance.USDT?.free || 0,
+            locked: futuresBalance.USDT?.used || 0
+          }
+        },
+        timestamp: Date.now()
+      };
+      
+      console.log('💰 Saldos reais obtidos:', result.spot.USDT.total, 'USDT spot');
+      return result;
+    } catch (error) {
+      console.error('Error fetching real account balance:', error);
+      // Retornar estrutura vazia mas válida em caso de erro
+      return {
+        spot: {
+          USDT: { total: 0, available: 0, locked: 0 },
+          BTC: { total: 0, available: 0, locked: 0 },
+          ETH: { total: 0, available: 0, locked: 0 }
+        },
+        futures: {
+          USDT: { total: 0, available: 0, locked: 0 }
+        },
+        timestamp: Date.now(),
+        error: 'Unable to fetch real balance - API permissions required'
+      };
+    }
   }
 
   // Health check method

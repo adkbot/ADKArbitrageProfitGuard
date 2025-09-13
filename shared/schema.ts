@@ -89,6 +89,21 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Trade = typeof trades.$inferSelect;
 export type InsertTrade = z.infer<typeof insertTradeSchema>;
+// Account balance (carteira)
+export const accountBalance = pgTable('account_balance', {
+  id: serial('id').primaryKey(),
+  exchange: text('exchange').notNull(), // 'spot' | 'futures'
+  asset: text('asset').notNull(), // 'USDT', 'BTC', etc
+  total: decimal('total', { precision: 18, scale: 8 }).notNull(),
+  available: decimal('available', { precision: 18, scale: 8 }).notNull(),
+  locked: decimal('locked', { precision: 18, scale: 8 }).notNull(),
+  lastUpdated: timestamp('last_updated').defaultNow().notNull()
+});
+
+export const insertAccountBalanceSchema = createInsertSchema(accountBalance);
+export type AccountBalance = typeof accountBalance.$inferSelect;
+export type InsertAccountBalance = z.infer<typeof insertAccountBalanceSchema>;
+
 export type BotConfig = typeof botConfig.$inferSelect;
 export type InsertBotConfig = z.infer<typeof insertBotConfigSchema>;
 export type DailyMetrics = typeof dailyMetrics.$inferSelect;
