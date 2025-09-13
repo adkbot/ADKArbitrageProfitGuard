@@ -26,7 +26,7 @@ let wsProxyAgent: any = null;
 let originalFetch: typeof fetch;
 
 // 🔥 LISTA DE PROXIES - APENAS URLS REAIS (USUÁRIO DEVE CONFIGURAR)
-const RELIABLE_PROXY_FALLBACKS = [
+const RELIABLE_PROXY_FALLBACKS: string[] = [
   // LISTA VAZIA - usuário deve configurar PROXY_URL se necessário
   // Exemplo: 'http://meu-proxy-real:3128'
 ];
