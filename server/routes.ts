@@ -4,6 +4,9 @@ import { storage } from "./storage";
 import { insertTradeSchema, insertBotConfigSchema, insertDailyMetricsSchema } from "@shared/schema";
 import { exchangeAPI } from "./exchange";
 import { AnalysisEngine } from "./analysis-engine.js";
+import publicApiRoutes from './public-api.js';
+import { UserManager } from './user-manager.js';
+import { AuthManager } from './auth.js';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint
@@ -577,6 +580,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }, 10000); // Wait 10s for server to be fully up
   }
+
+  // 🌍 MULTIUSER API - SISTEMA PÚBLICO PARA MÚLTIPLOS USUÁRIOS
+  app.use('/api', publicApiRoutes);
+  
+  // Initialize multiuser managers
+  const userManager = UserManager.getInstance();
+  const authManager = AuthManager.getInstance();
+  
+  // Reset daily stats every day at midnight
+  setInterval(() => {
+    userManager.resetDailyStats();
+  }, 24 * 60 * 60 * 1000); // 24 hours
+  
+  console.log('🌍 API multiusuário registrada:');
+  console.log('   📖 GET  /api/public/docs - Documentação');
+  console.log('   📊 GET  /api/public/status - Status geral');
+  console.log('   🔐 POST /api/public/auth - Login/registro');
+  console.log('   👤 GET  /api/user/status - Status do usuário');
+  console.log('   ▶️  POST /api/user/start - Iniciar bot');
+  console.log('   ⏹️  POST /api/user/stop - Parar bot');
+  console.log('   🔧 POST /api/user/config - Configurar API keys');
 
   const httpServer = createServer(app);
   return httpServer;
