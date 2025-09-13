@@ -310,7 +310,7 @@ export default function MultiuserDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Trades Hoje</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground\" />
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{status.trades.today}</div>
@@ -323,7 +323,7 @@ export default function MultiuserDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Lucro Hoje</CardTitle>
-                <Wallet className="h-4 w-4 text-muted-foreground\" />
+                <Wallet className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">
@@ -338,11 +338,11 @@ export default function MultiuserDashboard() {
         )}
 
         {/* Main Content */}
-        <Tabs defaultValue=\"control\" className="space-y-4">
+        <Tabs defaultValue="control" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="control\" data-testid="tab-control">Controle</TabsTrigger>
-            <TabsTrigger value="config\" data-testid="tab-config">Configurações</TabsTrigger>
-            <TabsTrigger value="trades\" data-testid="tab-trades">Trades</TabsTrigger>
+            <TabsTrigger value="control" data-testid="tab-control">Controle</TabsTrigger>
+            <TabsTrigger value="config" data-testid="tab-config">Configurações</TabsTrigger>
+            <TabsTrigger value="trades" data-testid="tab-trades">Trades</TabsTrigger>
           </TabsList>
 
           {/* Control Tab */}
@@ -359,7 +359,7 @@ export default function MultiuserDashboard() {
                   <Button
                     onClick={() => handleBotAction('start')}
                     disabled={isLoading || (status?.bot.enabled ?? false)}
-                    data-testid="button-start-bot\"
+                    data-testid="button-start-bot"
                   >
                     <Play className="h-4 w-4 mr-2" />
                     Iniciar Bot
@@ -368,7 +368,7 @@ export default function MultiuserDashboard() {
                     variant="outline"
                     onClick={() => handleBotAction('stop')}
                     disabled={isLoading || !(status?.bot.enabled ?? false)}
-                    data-testid="button-stop-bot\"
+                    data-testid="button-stop-bot"
                   >
                     <Square className="h-4 w-4 mr-2" />
                     Parar Bot
