@@ -38,10 +38,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🌐 INICIALIZAR PROXY ANTES DE QUALQUER CHAMADA DE REDE
-initializeProxy();
-
-(async () => {
+// 🌐 INITIALIZE GLOBAL PROXY SYSTEM BEFORE ANY NETWORK CALLS
+async function startServer() {
+  // Initialize global proxy system first
+  await initializeProxy();
+  
+  console.log('🚀 Starting server with proxy configuration...');
   const server = await registerRoutes(app);
 
   // API fence: prevent Vite from intercepting API routes
@@ -81,4 +83,10 @@ initializeProxy();
   }, () => {
     log(`serving on port ${port}`);
   });
-})();
+}
+
+// Start the server
+startServer().catch(error => {
+  console.error('🚨 Failed to start server:', error);
+  process.exit(1);
+});

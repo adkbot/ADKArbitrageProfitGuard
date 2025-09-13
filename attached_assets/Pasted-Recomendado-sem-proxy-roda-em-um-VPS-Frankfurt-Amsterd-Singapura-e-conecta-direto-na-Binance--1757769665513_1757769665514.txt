@@ -1,0 +1,160 @@
+Recomendado (sem proxy): roda em um VPS (Frankfurt/Amsterdã/Singapura) e conecta direto na Binance — nenhuma senha de proxy envolvida.
+
+Opcional (proxy sem auth): se você quiser mesmo usar proxy, use apenas um PROXY_URL aberto (sem user/pass). O código abaixo já detecta e usa só a URL; se ficar vazio, ele conecta direto.
+
+Abaixo vai um kit “colar e rodar”:
+
+1) .env mínimo (sem proxy obrigatório)
+# Exchange
+EXCHANGE=binance
+API_KEY=COLOQUE_SUA_BINANCE_KEY
+API_SECRET=COLOQUE_SUA_BINANCE_SECRET
+
+# Proxy sem autenticação (opcional). Deixe vazio para conexão direta.
+PROXY_URL=
+
+# Parâmetros do bot (exemplo)
+PAIRS=BTC/USDT,ETH/USDT
+BASIS_ENTRY=0.004
+BASIS_EXIT=0.0015
+MAX_NOTIONAL_USDT=500
+MAX_DAILY_TRADES=10
+SLIPPAGE_K=0.0002
+FUNDING_LOOKAHEAD_H=8
+WYCKOFF_N=50
+GEX_REFRESH_SEC=120
+
+
+Se quiser forçar um proxy sem senha, preencha assim:
+PROXY_URL=http://123.45.67.89:8080
+(sem PROXY_USERNAME/PROXY_PASSWORD — não usamos nada disso)
+
+2) net.js — rede única p/ axios e ccxt (usa só PROXY_URL quando existir)
+// net.js
+import axios from "axios";
+import HttpsProxyAgent from "https-proxy-agent";
+import "dotenv/config";
+import ccxt from "ccxt";
+
+const { PROXY_URL, EXCHANGE, API_KEY, API_SECRET } = process.env;
+
+// Cria um agente só se PROXY_URL estiver setado (sem auth)
+export function makeAgent() {
+  if (!PROXY_URL) return undefined;
+  return new HttpsProxyAgent(PROXY_URL);
+}
+
+// Axios já pronto
+export function makeHttp() {
+  const agent = makeAgent();
+  return axios.create({
+    timeout: 7000,
+    httpAgent: agent,
+    httpsAgent: agent,
+  });
+}
+
+// ccxt já pronto (passa agente pro node-fetch interno)
+export function makeExchange() {
+  const Klass = ccxt[EXCHANGE];
+  if (!Klass) throw new Error(`Exchange não suportada: ${EXCHANGE}`);
+
+  const agent = makeAgent();
+  const opts = {
+    apiKey: API_KEY,
+    secret: API_SECRET,
+    enableRateLimit: true,
+  };
+
+  // ccxt aceita 'agent' para Node (repassa para node-fetch)
+  if (agent) opts.agent = agent;
+
+  return new Klass(opts);
+}
+
+3) Exemplo de uso no seu bot (troque pelas suas importações)
+exchange.js
+// exchange.js
+import { makeExchange } from "./net.js";
+
+let ex;
+export async function getExchange() {
+  if (ex) return ex;
+  ex = makeExchange();
+  await ex.loadMarkets();
+  return ex;
+}
+
+http-client.js (se você usa axios em alguma parte)
+// http-client.js
+import { makeHttp } from "./net.js";
+export const http = makeHttp();
+
+// Exemplo: ping simples pra Binance (sem precisar de chave)
+export async function pingBinance() {
+  const r = await http.get("https://api.binance.com/api/v3/ping");
+  return r.status === 200;
+}
+
+4) Smoke test: “colar e rodar” para validar conexão
+test-conn.js
+import "dotenv/config";
+import { makeExchange } from "./net.js";
+import { makeHttp } from "./net.js";
+
+async function main() {
+  try {
+    const http = makeHttp();
+    const ping = await http.get("https://api.binance.com/api/v3/time");
+    console.log("HTTP OK (via proxy se setado):", ping.status, ping.data.serverTime);
+
+    const ex = makeExchange();
+    const ticker = await ex.fetchTicker("BTC/USDT");
+    console.log("CCXT OK:", ticker.symbol, ticker.last);
+  } catch (e) {
+    console.error("Falha:", e.message);
+    process.exit(1);
+  }
+}
+
+main();
+
+
+Rodar:
+
+npm i axios https-proxy-agent dotenv ccxt
+node test-conn.js
+
+
+Se PROXY_URL vazio → conecta direto.
+
+Se PROXY_URL preenchido (sem user/senha) → usa o proxy sem auth.
+
+5) PM2 (opcional) — subir como serviço
+
+Crie ecosystem.config.js:
+
+module.exports = {
+  apps: [
+    {
+      name: "arb-bot",
+      script: "server/index.js",
+      watch: false,
+      env: { NODE_ENV: "production" }
+    }
+  ]
+};
+
+
+Rodar:
+
+npm i -g pm2
+pm2 start ecosystem.config.js
+pm2 save
+pm2 status
+
+Observações francas (pra rodar liso mesmo)
+
+O melhor cenário SEM proxy e SEM senha de proxy é rodar em VPS fora (Frankfurt/Amsterdam/Singapura). Aí o seu bot conecta direto e pronto.
+
+Se optar por proxy sem auth, saiba que proxies abertos costumam ser instáveis (mudam, caem, limitam); mas o código acima já suporta “plugar e usar” só com a URL.

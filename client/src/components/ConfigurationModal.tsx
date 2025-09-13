@@ -57,8 +57,8 @@ const defaultConfig: ConfigData = {
   exchange: 'binance',
   apiKey: '',
   apiSecret: '',
-  deribitClientId: 'dD7we7mS',
-  deribitApiKey: 'Zp6KGk3ROQcPXILEUxOs5E3FaAIpCx_nFhRTMLSyrDQ',
+  deribitClientId: import.meta.env.VITE_DERIBIT_CLIENT_ID || '',
+  deribitApiKey: import.meta.env.VITE_DERIBIT_API_KEY || '',
   pairs: 'BTC/USDT,ETH/USDT',
   basisEntry: '0.004',
   basisExit: '0.0015',
@@ -188,7 +188,7 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
             <div className="grid gap-4">
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground mb-2">
-                  Credenciais pré-configuradas para API pública Deribit (GEX/Gamma)
+                  Credenciais da API pública Deribit (GEX/Gamma) - configuradas automaticamente
                 </p>
               </div>
               
@@ -199,7 +199,7 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
                   data-testid="input-deribit-client-id"
                   value={config.deribitClientId}
                   onChange={(e) => updateConfig('deribitClientId', e.target.value)}
-                  placeholder="Client ID"
+                  placeholder="Configurado automaticamente"
                 />
               </div>
               
@@ -210,7 +210,7 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
                   data-testid="input-deribit-api-key"
                   value={config.deribitApiKey}
                   onChange={(e) => updateConfig('deribitApiKey', e.target.value)}
-                  placeholder="API Key"
+                  placeholder="Configurado automaticamente"
                 />
               </div>
             </div>

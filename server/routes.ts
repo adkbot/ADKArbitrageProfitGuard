@@ -16,49 +16,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: 'API is working!', timestamp: new Date().toISOString() });
   });
   
-  // 🌐 PROXY CONNECTIVITY TEST ENDPOINT
-  app.get('/api/connectivity/status', async (req, res) => {
+  // 🌐 PROXY MANAGEMENT ENDPOINTS
+  app.get('/api/proxy/status', async (req, res) => {
     try {
-      console.log('🔍 Testing connectivity and proxy status...');
+      console.log('🔍 Getting proxy status...');
       
       const { getProxyStatus, testProxyConnectivity } = await import('./proxy');
       const proxyStatus = getProxyStatus();
       
-      // Test basic connectivity
-      let connectivityResults = {
-        http: false,
-        binance: false,
-        coingecko: false,
-        error: undefined as string | undefined
-      };
-      
-      try {
-        connectivityResults = await testProxyConnectivity();
-      } catch (error) {
-        connectivityResults.error = (error as Error).message;
-      }
-      
       const result = {
         proxy: proxyStatus,
-        connectivity: connectivityResults,
         timestamp: new Date().toISOString(),
         environment: {
           PROXY_ENABLED: process.env.PROXY_ENABLED || 'false',
           PROXY_URL_SET: !!process.env.PROXY_URL,
+          PROXY_URL_2_SET: !!process.env.PROXY_URL_2,
           NODE_ENV: process.env.NODE_ENV || 'development'
+        },
+        instructions: {
+          message: 'To enable proxy, set environment variables:',
+          variables: [
+            'PROXY_ENABLED=true',
+            'PROXY_URL=http://your-proxy-server:port',
+            'PROXY_URL_2=http://backup-proxy:port (optional)'
+          ],
+          recommendations: [
+            'Consider using reliable VPN services like NordVPN, ExpressVPN',
+            'Or proxy services like Bright Data, Smartproxy',
+            'For testing: public proxies from proxy-list.download'
+          ]
         }
       };
       
-      console.log('📊 Connectivity test result:', result);
+      console.log('📊 Proxy status:', result);
       res.json(result);
     } catch (error) {
-      console.error('❌ Error testing connectivity:', error);
+      console.error('❌ Error getting proxy status:', error);
       res.status(500).json({ 
-        error: 'Failed to test connectivity',
+        error: 'Failed to get proxy status',
         message: (error as Error).message,
         timestamp: new Date().toISOString()
       });
     }
+  });
+  
+  app.get('/api/proxy/test', async (req, res) => {
+    try {
+      console.log('🧪 Testing proxy connectivity...');
+      
+      const { testProxyConnectivity } = await import('./proxy');
+      
+      const connectivityResults = await testProxyConnectivity();
+      
+      const result = {
+        connectivity: connectivityResults,
+        success: connectivityResults.binance && connectivityResults.binanceFutures,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('🧪 Proxy test result:', result);
+      res.json(result);
+    } catch (error) {
+      console.error('❌ Error testing proxy connectivity:', error);
+      res.status(500).json({ 
+        error: 'Failed to test proxy connectivity',
+        message: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
+  app.post('/api/proxy/switch', async (req, res) => {
+    try {
+      console.log('🔄 Switching to next proxy...');
+      
+      const { switchToNextProxy } = await import('./proxy');
+      
+      const success = await switchToNextProxy();
+      
+      const result = {
+        success,
+        message: success ? 'Switched to next proxy successfully' : 'Failed to switch proxy',
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('🔄 Proxy switch result:', result);
+      res.json(result);
+    } catch (error) {
+      console.error('❌ Error switching proxy:', error);
+      res.status(500).json({ 
+        error: 'Failed to switch proxy',
+        message: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
+  app.post('/api/proxy/reset', async (req, res) => {
+    try {
+      console.log('🔄 Resetting proxy system...');
+      
+      const { resetProxy } = await import('./proxy');
+      
+      resetProxy();
+      
+      const result = {
+        success: true,
+        message: 'Proxy system reset to direct connections',
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('🔄 Proxy reset result:', result);
+      res.json(result);
+    } catch (error) {
+      console.error('❌ Error resetting proxy:', error);
+      res.status(500).json({ 
+        error: 'Failed to reset proxy',
+        message: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
+  // Legacy connectivity endpoint (redirect to new endpoints)
+  app.get('/api/connectivity/status', (req, res) => {
+    res.redirect('/api/proxy/status');
   });
   
   // Trades endpoints
