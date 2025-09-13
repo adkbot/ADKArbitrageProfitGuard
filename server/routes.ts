@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertTradeSchema, insertBotConfigSchema, insertDailyMetricsSchema } from "@shared/schema";
 import { exchangeAPI } from "./exchange";
+import { AnalysisEngine } from "./analysis-engine.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint
@@ -232,6 +233,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('Exchange API initialized successfully');
   } catch (error) {
     console.error('Failed to initialize exchange API:', error);
+  }
+
+  // Initialize and start analysis engine
+  const analysisEngine = new AnalysisEngine(exchangeAPI, storage);
+  
+  // Analysis engine control endpoints
+  app.post('/api/analysis/start', async (req, res) => {
+    try {
+      await analysisEngine.start();
+      res.json({ status: 'started', message: 'Motor de análise automática iniciado' });
+    } catch (error) {
+      res.status(500).json({ error: 'Erro ao iniciar motor de análise' });
+    }
+  });
+  
+  app.post('/api/analysis/stop', async (req, res) => {
+    try {
+      analysisEngine.stop();
+      res.json({ status: 'stopped', message: 'Motor de análise automática parado' });
+    } catch (error) {
+      res.status(500).json({ error: 'Erro ao parar motor de análise' });
+    }
+  });
+  
+  app.get('/api/analysis/status', (req, res) => {
+    try {
+      const status = analysisEngine.getStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({ error: 'Erro ao obter status da análise' });
+    }
+  });
+  
+  // Auto-start analysis engine if arbitrage is enabled
+  const config = await storage.getBotConfig();
+  if (config && config.arbitrageEnabled) {
+    console.log('🚀 Auto-iniciando motor de análise automática...');
+    await analysisEngine.start();
   }
 
   const httpServer = createServer(app);
