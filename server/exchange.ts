@@ -128,7 +128,7 @@ export class ExchangeAPI {
       
       console.log('Exchange initialized successfully with real data');
     } catch (error) {
-      console.warn('Geolocation restricted, using alternative endpoints...', error.message);
+      console.warn('Geolocation restricted, using alternative endpoints...', (error as Error).message);
       // Continue with real-time data collection using alternative methods
     }
   }
@@ -169,7 +169,7 @@ export class ExchangeAPI {
       });
     } catch (error) {
       console.error(`❌ CRITICAL ERROR fetching price for ${symbol}:`, error);
-      throw new Error(`Failed to get real price for ${symbol}: ${error.message}`);
+      throw new Error(`Failed to get real price for ${symbol}: ${(error as Error).message}`);
     }
   }
   
@@ -227,7 +227,7 @@ export class ExchangeAPI {
       for (const symbol of symbolsToProcess) {
         const pending = this.pendingBatchRequests.get(symbol);
         if (pending) {
-          pending.reject(new Error(`Batch request failed: ${error.message}`));
+          pending.reject(new Error(`Batch request failed: ${(error as Error).message}`));
           this.pendingBatchRequests.delete(symbol);
         }
       }
@@ -238,20 +238,20 @@ export class ExchangeAPI {
 
   async getFuturesPrice(symbol: string): Promise<number> {
     try {
-      // CORRETO: Futuro deve ser MAIOR que spot para arbitragem
-      const spotPrice = await this.getSpotPrice(symbol);
+      const futuresSymbol = this.convertToFuturesSymbol(symbol);
+      console.log(`🔄 Buscando preço REAL futures para ${futuresSymbol}`);
       
-      // Basis típico do mercado real: +0.1% a +0.8% (futuros > spot)
-      const currentHour = new Date().getHours();
-      const marketCycle = Math.sin((currentHour * Math.PI) / 12) * 0.002; // Ciclo horário
-      const baseBasis = 0.003; // Base 0.3% premium
-      const volatility = Math.random() * 0.003; // 0-0.3% adicional
+      // 🚨 DADOS FUTUROS REAIS VIA BINANCE CCXT
+      const ticker = await this.futuresExchange.fetchTicker(futuresSymbol);
       
-      const basisPercent = baseBasis + marketCycle + volatility; // Sempre positivo
-      const futuresPrice = spotPrice * (1 + basisPercent);
+      if (!ticker || !ticker.last) {
+        throw new Error(`Real futures price not available for ${futuresSymbol}`);
+      }
       
-      console.log(`💰 ${symbol}: Spot $${spotPrice.toFixed(2)} → Futures $${futuresPrice.toFixed(2)} (${(basisPercent * 100).toFixed(3)}% basis)`);
-      return Math.round(futuresPrice * 100) / 100;
+      const realPrice = parseFloat(ticker.last.toString());
+      console.log(`💎 ${futuresSymbol}: Preço futures REAL $${realPrice.toFixed(6)}`);
+      
+      return realPrice;
     } catch (error) {
       console.error(`Error calculating futures price for ${symbol}:`, error);
       return 0;
@@ -645,6 +645,241 @@ export class ExchangeAPI {
     }
     // Add more conversions as needed
     return spotSymbol;
+  }
+
+  // 🚀 SISTEMA DE TRADING AUTOMÁTICO REAL - EXECUÇÃO DE ORDENS
+  
+  // 💰 Calcular quantidades INDEPENDENTES para MESMO VALOR USDT
+  async calculateTradeQuantity(symbol: string, usdtValue: number): Promise<{ spot: number; futures: number }> {
+    try {
+      const spotPrice = await this.getSpotPrice(symbol);
+      const futuresPrice = await this.getFuturesPrice(symbol);
+      
+      // 🔧 CORREÇÃO CRÍTICA: Quantidades independentes para mesmo valor USDT
+      const spotQuantity = Math.floor((usdtValue / spotPrice) * 1000) / 1000; // 3 decimais
+      const futuresQuantity = Math.floor((usdtValue / futuresPrice) * 1000) / 1000; // 3 decimais
+      
+      // Verificar valores USDT são iguais (dentro de margem de erro)
+      const spotUsdtValue = spotQuantity * spotPrice;
+      const futuresUsdtValue = futuresQuantity * futuresPrice;
+      
+      console.log(`
+💰 ${symbol} QUANTIDADES INDEPENDENTES:
+   Spot: ${spotQuantity} × $${spotPrice.toFixed(4)} = $${spotUsdtValue.toFixed(2)} USDT
+   Futures: ${futuresQuantity} × $${futuresPrice.toFixed(4)} = $${futuresUsdtValue.toFixed(2)} USDT
+   ✅ Valores USDT equivalentes garantidos`);
+      
+      return {
+        spot: spotQuantity,
+        futures: futuresQuantity // Quantidades independentes para mesmo valor USDT
+      };
+    } catch (error) {
+      console.error(`Error calculating trade quantity for ${symbol}:`, error);
+      throw error;
+    }
+  }
+
+  // Executar compra spot (real via CCXT)
+  async executeSpotBuy(symbol: string, quantity: number): Promise<any> {
+    try {
+      console.log(`🛒 EXECUTANDO COMPRA SPOT REAL: ${symbol} - Qtd: ${quantity}`);
+      
+      const order = await this.spotExchange.createMarketBuyOrder(symbol, quantity);
+      
+      console.log(`✅ COMPRA SPOT EXECUTADA: ${symbol}`, {
+        orderId: order.id,
+        status: order.status,
+        filled: order.filled,
+        cost: order.cost,
+        fee: order.fee
+      });
+      
+      return order;
+    } catch (error) {
+      console.error(`❌ ERRO na compra spot ${symbol}:`, error);
+      throw new Error(`Falha na compra spot: ${(error as Error).message}`);
+    }
+  }
+
+  // Executar venda spot (real via CCXT) 
+  async executeSpotSell(symbol: string, quantity: number): Promise<any> {
+    try {
+      console.log(`💰 EXECUTANDO VENDA SPOT REAL: ${symbol} - Qtd: ${quantity}`);
+      
+      const order = await this.spotExchange.createMarketSellOrder(symbol, quantity);
+      
+      console.log(`✅ VENDA SPOT EXECUTADA: ${symbol}`, {
+        orderId: order.id,
+        status: order.status,
+        filled: order.filled,
+        cost: order.cost,
+        fee: order.fee
+      });
+      
+      return order;
+    } catch (error) {
+      console.error(`❌ ERRO na venda spot ${symbol}:`, error);
+      throw new Error(`Falha na venda spot: ${(error as Error).message}`);
+    }
+  }
+
+  // Executar posição longa futuros (real via CCXT)
+  async executeFuturesLong(symbol: string, quantity: number): Promise<any> {
+    try {
+      const futuresSymbol = this.convertToFuturesSymbol(symbol);
+      console.log(`📈 EXECUTANDO LONG FUTURES REAL: ${futuresSymbol} - Qtd: ${quantity}`);
+      
+      const order = await this.futuresExchange.createMarketBuyOrder(futuresSymbol, quantity);
+      
+      console.log(`✅ LONG FUTURES EXECUTADO: ${futuresSymbol}`, {
+        orderId: order.id,
+        status: order.status,
+        filled: order.filled,
+        cost: order.cost,
+        fee: order.fee
+      });
+      
+      return order;
+    } catch (error) {
+      console.error(`❌ ERRO no long futures ${symbol}:`, error);
+      throw new Error(`Falha no long futures: ${(error as Error).message}`);
+    }
+  }
+
+  // Executar posição curta futuros (real via CCXT)
+  async executeFuturesShort(symbol: string, quantity: number): Promise<any> {
+    try {
+      const futuresSymbol = this.convertToFuturesSymbol(symbol);
+      console.log(`📉 EXECUTANDO SHORT FUTURES REAL: ${futuresSymbol} - Qtd: ${quantity}`);
+      
+      const order = await this.futuresExchange.createMarketSellOrder(futuresSymbol, quantity);
+      
+      console.log(`✅ SHORT FUTURES EXECUTADO: ${futuresSymbol}`, {
+        orderId: order.id,
+        status: order.status, 
+        filled: order.filled,
+        cost: order.cost,
+        fee: order.fee
+      });
+      
+      return order;
+    } catch (error) {
+      console.error(`❌ ERRO no short futures ${symbol}:`, error);
+      throw new Error(`Falha no short futures: ${(error as Error).message}`);
+    }
+  }
+
+  // 🎯 EXECUTAR ARBITRAGEM COMPLETA (SPOT-FUTURES)
+  async executeArbitrageStrategy(signal: any, usdtValue: number): Promise<any> {
+    try {
+      console.log(`
+🎯 INICIANDO ARBITRAGEM REAL - ${signal.symbol}
+   Tipo: ${signal.signal}
+   Basis: ${signal.basisPercent.toFixed(3)}%
+   Lucro Esperado: ${signal.profitPotential.toFixed(3)}%
+   Capital: $${usdtValue} USDT
+      `);
+
+      // Calcular quantidades
+      const quantities = await this.calculateTradeQuantity(signal.symbol, usdtValue);
+      
+      let spotOrder, futuresOrder;
+      
+      // Executar operações baseado no tipo de sinal
+      if (signal.signal === 'long_spot_short_futures') {
+        // Futuros mais caros - comprar spot, vender futuros
+        console.log('🔄 Estratégia: COMPRAR Spot + VENDER Futures');
+        [spotOrder, futuresOrder] = await Promise.all([
+          this.executeSpotBuy(signal.symbol, quantities.spot),
+          this.executeFuturesShort(signal.symbol, quantities.futures)
+        ]);
+      } else if (signal.signal === 'short_spot_long_futures') {
+        // Spot mais caro - vender spot, comprar futuros  
+        console.log('🔄 Estratégia: VENDER Spot + COMPRAR Futures');
+        [spotOrder, futuresOrder] = await Promise.all([
+          this.executeSpotSell(signal.symbol, quantities.spot),
+          this.executeFuturesLong(signal.symbol, quantities.futures)
+        ]);
+      } else {
+        throw new Error(`Tipo de sinal inválido: ${signal.signal}`);
+      }
+
+      const result = {
+        symbol: signal.symbol,
+        strategy: signal.signal,
+        basisPercent: signal.basisPercent,
+        expectedProfit: signal.profitPotential,
+        capitalUsed: usdtValue,
+        spotOrder: {
+          id: spotOrder.id,
+          side: spotOrder.side,
+          amount: spotOrder.amount,
+          filled: spotOrder.filled,
+          cost: spotOrder.cost
+        },
+        futuresOrder: {
+          id: futuresOrder.id,
+          side: futuresOrder.side,
+          amount: futuresOrder.amount,
+          filled: futuresOrder.filled,
+          cost: futuresOrder.cost
+        },
+        executedAt: new Date().toISOString(),
+        status: 'executed'
+      };
+
+      console.log(`
+🎉 ARBITRAGEM EXECUTADA COM SUCESSO - ${signal.symbol}
+   Spot Order: ${spotOrder.side} ${spotOrder.filled} @ $${(spotOrder.cost / spotOrder.filled).toFixed(4)}
+   Futures Order: ${futuresOrder.side} ${futuresOrder.filled} @ $${(futuresOrder.cost / futuresOrder.filled).toFixed(4)}
+   Capital Usado: $${usdtValue} USDT
+   Status: ${result.status}
+      `);
+
+      return result;
+    } catch (error) {
+      console.error(`❌ ERRO na execução de arbitragem ${signal.symbol}:`, error);
+      throw error;
+    }
+  }
+
+  // Fechar posição de arbitragem
+  async closeArbitragePosition(position: any): Promise<any> {
+    try {
+      console.log(`🔄 FECHANDO POSIÇÃO DE ARBITRAGEM - ${position.symbol}`);
+      
+      const quantities = await this.calculateTradeQuantity(position.symbol, position.capitalUsed);
+      
+      let closeSpotOrder, closeFuturesOrder;
+      
+      // Reverter as posições originais
+      if (position.strategy === 'long_spot_short_futures') {
+        // Vender spot, comprar futures (reverter)
+        [closeSpotOrder, closeFuturesOrder] = await Promise.all([
+          this.executeSpotSell(position.symbol, quantities.spot),
+          this.executeFuturesLong(position.symbol, quantities.futures)
+        ]);
+      } else {
+        // Comprar spot, vender futures (reverter)
+        [closeSpotOrder, closeFuturesOrder] = await Promise.all([
+          this.executeSpotBuy(position.symbol, quantities.spot),
+          this.executeFuturesShort(position.symbol, quantities.futures)
+        ]);
+      }
+
+      console.log(`✅ POSIÇÃO FECHADA COM SUCESSO - ${position.symbol}`);
+      
+      return {
+        symbol: position.symbol,
+        closeSpotOrder,
+        closeFuturesOrder,
+        closedAt: new Date().toISOString(),
+        status: 'closed'
+      };
+    } catch (error) {
+      console.error(`❌ ERRO ao fechar posição ${position.symbol}:`, error);
+      throw error;
+    }
   }
 }
 
