@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+// 🌐 PROXY BOOTSTRAP - DEVE SER INICIALIZADO ANTES DE QUALQUER CHAMADA DE REDE
+import { initializeProxy } from "./proxy";
 
 const app = express();
 app.use(express.json());
@@ -35,6 +37,9 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// 🌐 INICIALIZAR PROXY ANTES DE QUALQUER CHAMADA DE REDE
+initializeProxy();
 
 (async () => {
   const server = await registerRoutes(app);

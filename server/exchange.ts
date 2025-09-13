@@ -1,5 +1,7 @@
 import ccxt from 'ccxt';
 import WebSocket from 'ws';
+// 🌐 PROXY SUPPORT FOR GEO-RESTRICTED APIs
+import { getWsAgent, getProxyStatus } from './proxy';
 
 export interface MarketData {
   symbol: string;
@@ -26,43 +28,51 @@ export class ExchangeAPI {
   private marketDataCallbacks: Map<string, (data: MarketData) => void> = new Map();
   private orderBookCallbacks: Map<string, (data: OrderBookData) => void> = new Map();
   
-  // 🛡️ SISTEMA DE CONTROLE DE RATE LIMIT - MÁXIMO 90%
+  // 🛡️ SISTEMA DE CONTROLE DE RATE LIMIT - BINANCE API LIMITS
   private priceCache = new Map<string, { price: number; timestamp: number; ttl: number }>();
   private apiCallTracker = { count: 0, resetTime: Date.now() + 60000 }; // Reset a cada minuto
-  private readonly MAX_API_CALLS_PER_MINUTE = 54; // 90% do limite do CoinGecko (60/min)
-  private readonly CACHE_TTL_MS = 30000; // Cache 30 segundos para dados de preço
+  private readonly MAX_API_CALLS_PER_MINUTE = 1000; // Binance allows 1200/min, use 1000 for safety
+  private readonly CACHE_TTL_MS = 10000; // Cache 10 segundos para dados de preço
   private lastApiCall = 0;
-  private readonly MIN_INTERVAL_MS = 1100; // Mínimo 1.1 segundos entre chamadas
+  private readonly MIN_INTERVAL_MS = 100; // Mínimo 100ms entre chamadas
 
   constructor() {
-    // Initialize CCXT with Binance for spot - use real API for public data
-    this.spotExchange = new ccxt.binance({
-      apiKey: process.env.BINANCE_API_KEY || 'test',
-      secret: process.env.BINANCE_SECRET_KEY || 'test',
+    console.log('🔧 Inicializando ExchangeAPI com configurações de proxy...');
+    const proxyStatus = getProxyStatus();
+    console.log('📊 Status do Proxy:', proxyStatus);
+    
+    // 🌐 CONFIGURAÇÕES OTIMIZADAS PARA EVITAR RESTRIÇÕES GEOGRÁFICAS
+    const commonOptions = {
+      apiKey: process.env.BINANCE_API_KEY || '',
+      secret: process.env.BINANCE_SECRET_KEY || '',
       sandbox: false,
       enableRateLimit: true,
+      // Configurar proxy se disponível
+      ...(proxyStatus.enabled && process.env.PROXY_URL ? {
+        httpProxy: process.env.PROXY_URL,
+        httpsProxy: process.env.PROXY_URL,
+      } : {}),
+    };
+    
+    // Initialize CCXT with Binance for spot
+    this.spotExchange = new ccxt.binance({
+      ...commonOptions,
       options: {
         defaultType: 'spot',
-      },
-      // Bypass geolocation restrictions for public data
-      headers: {
-        'X-MBX-APIKEY': process.env.BINANCE_API_KEY || '',
+        adjustForTimeDifference: true,
       },
     });
     
     // Initialize CCXT with Binance for futures (USDT-M perpetuals)
     this.futuresExchange = new ccxt.binance({
-      apiKey: process.env.BINANCE_API_KEY || 'test', 
-      secret: process.env.BINANCE_SECRET_KEY || 'test',
-      sandbox: false,
-      enableRateLimit: true,
+      ...commonOptions,
       options: {
         defaultType: 'swap', // For USDT-M perpetuals
-      },
-      headers: {
-        'X-MBX-APIKEY': process.env.BINANCE_API_KEY || '',
+        adjustForTimeDifference: true,
       },
     });
+    
+    console.log('✅ ExchangeAPI inicializado com configurações otimizadas');
   }
 
   // 🛡️ MÉTODOS DE CONTROLE DE RATE LIMIT E CACHE
@@ -133,128 +143,116 @@ export class ExchangeAPI {
     }
   }
 
-  // 🚀 BATCH PRICING ENGINE - Fetch multiple prices in single API call
-  private batchRequestQueue: string[] = [];
-  private batchTimeout: NodeJS.Timeout | null = null;
-  private pendingBatchRequests = new Map<string, { resolve: (price: number) => void; reject: (error: Error) => void }>();
-
+  // 🚀 CRITICAL SECURITY FIX: Use Binance CCXT for spot prices (same venue as futures)
   async getSpotPrice(symbol: string): Promise<number> {
     try {
       // 🔥 1. VERIFICAR CACHE PRIMEIRO 
-      const cachedPrice = this.getCachedPrice(symbol);
+      const cachedPrice = this.getCachedPrice(`spot_${symbol}`);
       if (cachedPrice !== null) {
         return cachedPrice;
       }
       
-      // 🔥 2. ADD TO BATCH QUEUE - ULTRA EFFICIENT
-      console.log(`🌍 Queuing ${symbol} for batch CoinGecko request`);
-      
-      const coinId = this.getCoinGeckoId(symbol);
-      if (!coinId) {
-        throw new Error(`No CoinGecko mapping found for ${symbol}`);
-      }
-      
-      return new Promise<number>((resolve, reject) => {
-        this.pendingBatchRequests.set(symbol, { resolve, reject });
-        this.batchRequestQueue.push(symbol);
-        
-        // Process batch after 500ms or when 10 symbols queued
-        if (this.batchTimeout) {
-          clearTimeout(this.batchTimeout);
-        }
-        
-        this.batchTimeout = setTimeout(() => {
-          this.processBatchRequest();
-        }, this.batchRequestQueue.length >= 10 ? 100 : 500);
-      });
-    } catch (error) {
-      console.error(`❌ CRITICAL ERROR fetching price for ${symbol}:`, error);
-      throw new Error(`Failed to get real price for ${symbol}: ${(error as Error).message}`);
-    }
-  }
-  
-  private async processBatchRequest(): Promise<void> {
-    if (this.batchRequestQueue.length === 0) return;
-    
-    const symbolsToProcess = [...this.batchRequestQueue];
-    this.batchRequestQueue = [];
-    this.batchTimeout = null;
-    
-    try {
-      // Convert symbols to CoinGecko IDs
-      const coinIds = symbolsToProcess
-        .map(symbol => this.getCoinGeckoId(symbol))
-        .filter(id => id !== null)
-        .join(',');
-      
-      console.log(`🚀 BATCH REQUEST: Fetching ${symbolsToProcess.length} prices via CoinGecko`);
+      // 🔥 2. USAR BINANCE CCXT PARA SPOT (MESMA VENUE QUE FUTURES) 🔥
+      console.log(`📊 Fetching REAL Binance spot price for ${symbol}`);
       
       await this.waitForRateLimit();
       
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd`;
-      const response = await fetch(url, { 
-        headers: { 'User-Agent': 'arbitrage-system/1.0' },
-        signal: AbortSignal.timeout(15000)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`CoinGecko batch API error: ${response.status} ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      // Process each symbol in the batch
-      for (const symbol of symbolsToProcess) {
-        const coinId = this.getCoinGeckoId(symbol);
-        const price = coinId ? data[coinId]?.usd : null;
+      try {
+        // Primary: Use Binance CCXT for spot price - same venue as futures - SECURITY FIX
+        const ticker = await this.spotExchange.fetchTicker(symbol);
         
-        const pending = this.pendingBatchRequests.get(symbol);
-        if (pending) {
-          if (price && price > 0) {
-            console.log(`💰 ${symbol}: Real batch price $${price.toFixed(2)}`);
-            this.setCachedPrice(symbol, price);
-            pending.resolve(price);
-          } else {
-            pending.reject(new Error(`Price not found for ${symbol} in batch response`));
-          }
-          this.pendingBatchRequests.delete(symbol);
+        if (!ticker || !ticker.last) {
+          throw new Error(`Real spot price not available for ${symbol}`);
         }
+        
+        const realPrice = parseFloat(ticker.last.toString());
+        console.log(`✅ ${symbol}: REAL Binance spot price $${realPrice.toFixed(4)} (SAME VENUE AS FUTURES)`);
+        
+        // Cache com prefixo spot_ para diferenciar de futures
+        this.setCachedPrice(`spot_${symbol}`, realPrice);
+        
+        return realPrice;
+      } catch (ccxtError) {
+        // Fallback: Use public Binance API for geolocation restrictions (still same venue)
+        console.log(`⚠️  CCXT restricted, using public Binance API fallback for ${symbol}`);
+        
+        const binanceSymbol = symbol.replace('/', '');
+        const response = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
+        
+        if (!response.ok) {
+          throw new Error(`Binance API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const fallbackPrice = parseFloat(data.lastPrice);
+        
+        console.log(`✅ ${symbol}: REAL Binance spot price $${fallbackPrice.toFixed(4)} (PUBLIC API FALLBACK - SAME VENUE)`);
+        
+        // Cache com prefixo spot_ para diferenciar de futures
+        this.setCachedPrice(`spot_${symbol}`, fallbackPrice);
+        
+        return fallbackPrice;
       }
     } catch (error) {
-      console.error(`❌ Batch request failed:`, error);
-      
-      // Reject all pending requests for this batch
-      for (const symbol of symbolsToProcess) {
-        const pending = this.pendingBatchRequests.get(symbol);
-        if (pending) {
-          pending.reject(new Error(`Batch request failed: ${(error as Error).message}`));
-          this.pendingBatchRequests.delete(symbol);
-        }
-      }
+      console.error(`❌ CRITICAL ERROR fetching spot price from Binance for ${symbol}:`, error);
+      throw new Error(`Failed to get real Binance spot price for ${symbol}: ${(error as Error).message}`);
     }
   }
-
-  // REMOVED: No more fallback prices - all symbols must use real Binance data
+  
+  // 🗑️ REMOVED: Old CoinGecko batch processing system (security risk)
 
   async getFuturesPrice(symbol: string): Promise<number> {
     try {
-      const futuresSymbol = this.convertToFuturesSymbol(symbol);
-      console.log(`🔄 Buscando preço REAL futures para ${futuresSymbol}`);
-      
-      // 🚨 DADOS FUTUROS REAIS VIA BINANCE CCXT
-      const ticker = await this.futuresExchange.fetchTicker(futuresSymbol);
-      
-      if (!ticker || !ticker.last) {
-        throw new Error(`Real futures price not available for ${futuresSymbol}`);
+      // 🔥 1. VERIFICAR CACHE PRIMEIRO 
+      const cachedPrice = this.getCachedPrice(`futures_${symbol}`);
+      if (cachedPrice !== null) {
+        return cachedPrice;
       }
       
-      const realPrice = parseFloat(ticker.last.toString());
-      console.log(`💎 ${futuresSymbol}: Preço futures REAL $${realPrice.toFixed(6)}`);
+      const futuresSymbol = this.convertToFuturesSymbol(symbol);
+      console.log(`🔄 Fetching REAL Binance futures price for ${futuresSymbol}`);
       
-      return realPrice;
+      await this.waitForRateLimit();
+      
+      try {
+        // Primary: Use Binance CCXT for futures price - same venue as spot - SECURITY FIX
+        const ticker = await this.futuresExchange.fetchTicker(futuresSymbol);
+        
+        if (!ticker || !ticker.last) {
+          throw new Error(`Real futures price not available for ${futuresSymbol}`);
+        }
+        
+        const realPrice = parseFloat(ticker.last.toString());
+        console.log(`💎 ${futuresSymbol}: REAL Binance futures price $${realPrice.toFixed(6)} (SAME VENUE AS SPOT)`);
+        
+        // Cache com prefixo futures_ para diferenciar de spot
+        this.setCachedPrice(`futures_${symbol}`, realPrice);
+        
+        return realPrice;
+      } catch (ccxtError) {
+        // Fallback: Use public Binance futures API for geolocation restrictions (still same venue)
+        console.log(`⚠️  CCXT restricted, using public Binance futures API fallback for ${futuresSymbol}`);
+        
+        const binanceSymbol = symbol.replace('/', '');
+        const response = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${binanceSymbol}`);
+        
+        if (!response.ok) {
+          throw new Error(`Binance futures API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const fallbackPrice = parseFloat(data.lastPrice);
+        
+        console.log(`💎 ${futuresSymbol}: REAL Binance futures price $${fallbackPrice.toFixed(6)} (PUBLIC API FALLBACK - SAME VENUE)`);
+        
+        // Cache com prefixo futures_ para diferenciar de spot
+        this.setCachedPrice(`futures_${symbol}`, fallbackPrice);
+        
+        return fallbackPrice;
+      }
     } catch (error) {
-      console.error(`Error calculating futures price for ${symbol}:`, error);
-      return 0;
+      console.error(`❌ CRITICAL ERROR fetching futures price from Binance for ${symbol}:`, error);
+      throw new Error(`Failed to get real Binance futures price for ${symbol}: ${(error as Error).message}`);
     }
   }
 
@@ -492,78 +490,7 @@ export class ExchangeAPI {
     console.log('Exchange API disconnected');
   }
 
-  // Converter símbolos para IDs do CoinGecko (dados 100% reais)
-  private getCoinGeckoId(symbol: string): string | null {
-    const mapping: Record<string, string> = {
-      // Major coins
-      'BTC/USDT': 'bitcoin',
-      'ETH/USDT': 'ethereum',
-      'BNB/USDT': 'binancecoin',
-      
-      // Top altcoins
-      'SOL/USDT': 'solana',
-      'XRP/USDT': 'ripple',
-      'ADA/USDT': 'cardano',
-      'DOGE/USDT': 'dogecoin',
-      'TRX/USDT': 'tron',
-      'MATIC/USDT': 'matic-network',
-      'LTC/USDT': 'litecoin',
-      'AVAX/USDT': 'avalanche-2',
-      'DOT/USDT': 'polkadot',
-      'SHIB/USDT': 'shiba-inu',
-      'UNI/USDT': 'uniswap',
-      'ATOM/USDT': 'cosmos',
-      'LINK/USDT': 'chainlink',
-      'ETC/USDT': 'ethereum-classic',
-      'FTM/USDT': 'fantom',
-      'NEAR/USDT': 'near',
-      'ALGO/USDT': 'algorand',
-      
-      // Layer 1/2 tokens
-      'APT/USDT': 'aptos',
-      'SUI/USDT': 'sui',
-      'INJ/USDT': 'injective-protocol',
-      'TIA/USDT': 'celestia',
-      'SEI/USDT': 'sei-network',
-      'ARB/USDT': 'arbitrum',
-      'OP/USDT': 'optimism',
-      
-      // Meme/Social tokens
-      'BLUR/USDT': 'blur',
-      'PEPE/USDT': 'pepe',
-      'WLD/USDT': 'worldcoin-wld',
-      
-      // Storage/Infrastructure
-      'FIL/USDT': 'filecoin',
-      
-      // DeFi tokens
-      'AAVE/USDT': 'aave',
-      'MKR/USDT': 'maker',
-      'CRV/USDT': 'curve-dao-token',
-      'SUSHI/USDT': 'sushi',
-      'YFI/USDT': 'yearn-finance',
-      'COMP/USDT': 'compound-governance-token',
-      'SNX/USDT': 'havven',
-      
-      // Legacy/Other
-      'REN/USDT': 'republic-protocol',
-      'KSM/USDT': 'kusama',
-      'ICP/USDT': 'internet-computer',
-      'VET/USDT': 'vechain',
-      'HBAR/USDT': 'hedera-hashgraph',
-      'EGLD/USDT': 'elrond-egd-2',
-      'THETA/USDT': 'theta-token',
-      
-      // Gaming/Metaverse
-      'MANA/USDT': 'decentraland',
-      'SAND/USDT': 'the-sandbox',
-      'AXS/USDT': 'axie-infinity',
-      'GALA/USDT': 'gala',
-      'CHZ/USDT': 'chiliz'
-    };
-    
-    return mapping[symbol] || null;
-  }
+  // 🗑️ REMOVED: CoinGecko mapping function (security fix - no longer using external venue data)
   
   // Obter saldos reais da carteira
   async getAccountBalance(): Promise<any> {

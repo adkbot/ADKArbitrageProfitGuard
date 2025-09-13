@@ -16,6 +16,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: 'API is working!', timestamp: new Date().toISOString() });
   });
   
+  // 🌐 PROXY CONNECTIVITY TEST ENDPOINT
+  app.get('/api/connectivity/status', async (req, res) => {
+    try {
+      console.log('🔍 Testing connectivity and proxy status...');
+      
+      const { getProxyStatus, testProxyConnectivity } = await import('./proxy');
+      const proxyStatus = getProxyStatus();
+      
+      // Test basic connectivity
+      let connectivityResults = {
+        http: false,
+        binance: false,
+        coingecko: false,
+        error: undefined as string | undefined
+      };
+      
+      try {
+        connectivityResults = await testProxyConnectivity();
+      } catch (error) {
+        connectivityResults.error = (error as Error).message;
+      }
+      
+      const result = {
+        proxy: proxyStatus,
+        connectivity: connectivityResults,
+        timestamp: new Date().toISOString(),
+        environment: {
+          PROXY_ENABLED: process.env.PROXY_ENABLED || 'false',
+          PROXY_URL_SET: !!process.env.PROXY_URL,
+          NODE_ENV: process.env.NODE_ENV || 'development'
+        }
+      };
+      
+      console.log('📊 Connectivity test result:', result);
+      res.json(result);
+    } catch (error) {
+      console.error('❌ Error testing connectivity:', error);
+      res.status(500).json({ 
+        error: 'Failed to test connectivity',
+        message: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+  
   // Trades endpoints
   app.get('/api/trades', async (req, res) => {
     try {

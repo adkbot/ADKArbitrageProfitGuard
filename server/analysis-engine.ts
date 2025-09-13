@@ -139,7 +139,7 @@ export class AnalysisEngine {
           futuresPrice: data.futuresPrice,
           basisPercent: data.basisPercent,
           signal: data.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
-          confidence: Math.min(100, (netProfit / basisThreshold) * 100),
+          confidence: Math.min(100, (netProfit / ENTRY_THRESHOLD) * 100),
           profitPotential: netProfit, // USAR LUCRO LÍQUIDO
           wyckoffPhase,
           volume24h: data.volume24h || 0,
