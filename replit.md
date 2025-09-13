@@ -42,13 +42,13 @@ Preferred communication style: Simple, everyday language.
 ### Configuration Management
 - **Environment Variables**: Comprehensive .env configuration for API credentials and trading parameters
 - **UI Controls**: Modal-based configuration interface with validation
-- **Default Values**: Pre-configured Deribit API credentials and sensible trading defaults
+- **Default Values**: Sensible trading parameter defaults for production use
 
 ## External Dependencies
 
 ### Exchange APIs
 - **Primary Exchange**: Binance (via CCXT) - spot and futures trading
-- **Market Data Provider**: Deribit API (public endpoints) for options gamma exposure data
+- **Market Data Provider**: Configurable external APIs for options gamma exposure data
 - **API Credentials**: Secure storage and management of exchange API keys
 
 ### Database Services

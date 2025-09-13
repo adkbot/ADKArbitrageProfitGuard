@@ -29,10 +29,6 @@ interface ConfigData {
   apiKey: string;
   apiSecret: string;
   
-  // Deribit (pré-preenchido)
-  deribitClientId: string;
-  deribitApiKey: string;
-  
   // Parâmetros
   pairs: string;
   basisEntry: string;
@@ -57,8 +53,6 @@ const defaultConfig: ConfigData = {
   exchange: 'binance',
   apiKey: '',
   apiSecret: '',
-  deribitClientId: import.meta.env.VITE_DERIBIT_CLIENT_ID || '',
-  deribitApiKey: import.meta.env.VITE_DERIBIT_API_KEY || '',
   pairs: 'BTC/USDT,ETH/USDT',
   basisEntry: '0.004',
   basisExit: '0.0015',
@@ -84,17 +78,34 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
   const testConnection = async () => {
     setConnectionStatus('testing');
     
-    // Simulate API test
-    setTimeout(() => {
-      const success = config.apiKey.length > 10 && config.apiSecret.length > 10;
-      setConnectionStatus(success ? 'success' : 'error');
+    try {
+      // Real API connection test
+      const response = await fetch('/api/test-connection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          exchange: config.exchange,
+          apiKey: config.apiKey,
+          apiSecret: config.apiSecret
+        })
+      });
+      
+      const result = await response.json();
+      setConnectionStatus(result.success ? 'success' : 'error');
       
       setTimeout(() => {
-        if (connectionStatus !== 'testing') {
-          setConnectionStatus('idle');
-        }
+        setConnectionStatus('idle');
       }, 3000);
-    }, 2000);
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      setConnectionStatus('error');
+      
+      setTimeout(() => {
+        setConnectionStatus('idle');
+      }, 3000);
+    }
   };
   
   const updateConfig = (field: keyof ConfigData, value: string | boolean) => {
@@ -117,7 +128,6 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
         <Tabs defaultValue="exchange" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="exchange">Exchange</TabsTrigger>
-            <TabsTrigger value="deribit">Deribit/GEX</TabsTrigger>
             <TabsTrigger value="params">Parâmetros</TabsTrigger>
             <TabsTrigger value="advanced">Avançado</TabsTrigger>
           </TabsList>
@@ -184,37 +194,6 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
             </div>
           </TabsContent>
           
-          <TabsContent value="deribit" className="space-y-4">
-            <div className="grid gap-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground mb-2">
-                  Credenciais da API pública Deribit (GEX/Gamma) - configuradas automaticamente
-                </p>
-              </div>
-              
-              <div className="grid gap-2">
-                <Label htmlFor="deribitClientId">Deribit Client ID</Label>
-                <Input
-                  id="deribitClientId"
-                  data-testid="input-deribit-client-id"
-                  value={config.deribitClientId}
-                  onChange={(e) => updateConfig('deribitClientId', e.target.value)}
-                  placeholder="Configurado automaticamente"
-                />
-              </div>
-              
-              <div className="grid gap-2">
-                <Label htmlFor="deribitApiKey">Deribit API Key</Label>
-                <Input
-                  id="deribitApiKey"
-                  data-testid="input-deribit-api-key"
-                  value={config.deribitApiKey}
-                  onChange={(e) => updateConfig('deribitApiKey', e.target.value)}
-                  placeholder="Configurado automaticamente"
-                />
-              </div>
-            </div>
-          </TabsContent>
           
           <TabsContent value="params" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">

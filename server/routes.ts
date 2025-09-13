@@ -16,6 +16,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: 'API is working!', timestamp: new Date().toISOString() });
   });
   
+  // Test connection endpoint for configuration modal
+  app.post('/api/test-connection', async (req, res) => {
+    try {
+      const { exchange, apiKey, apiSecret } = req.body;
+      
+      if (!exchange || !apiKey || !apiSecret) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Exchange, API Key e API Secret são obrigatórios' 
+        });
+      }
+      
+      const result = await exchangeAPI.testConnection(exchange, apiKey, apiSecret);
+      res.json(result);
+      
+    } catch (error) {
+      console.error('❌ Erro no teste de conexão:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: `Erro interno: ${(error as Error).message}` 
+      });
+    }
+  });
+  
   // 🌐 PROXY MANAGEMENT ENDPOINTS
   app.get('/api/proxy/status', async (req, res) => {
     try {

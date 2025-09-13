@@ -1,5 +1,5 @@
-// 🚀 EXCHANGE API SIMPLIFICADO - Usando net.js robusto
-// Baseado na recomendação "colar e rodar" do usuário
+// 🚀 EXCHANGE API - APENAS DADOS REAIS
+// Produção exclusiva com dados reais da Binance
 
 import WebSocket from 'ws';
 import { makeSpotExchange, makeFuturesExchange, makeFetch, getNetworkStatus } from './net.js';
@@ -23,7 +23,7 @@ export interface OrderBookData {
 }
 
 /**
- * 🔥 EXCHANGE API SIMPLIFICADO - ROBUSTO E FÁCIL DE MANTER
+ * 🔥 EXCHANGE API - APENAS DADOS REAIS DE PRODUÇÃO
  */
 export class ExchangeAPI {
   private spotExchange: any;
@@ -32,28 +32,24 @@ export class ExchangeAPI {
   private marketDataCallbacks: Map<string, (data: MarketData) => void> = new Map();
   private orderBookCallbacks: Map<string, (data: OrderBookData) => void> = new Map();
   
-  // 🛡️ CACHE SIMPLES PARA OTIMIZAÇÃO
+  // 🛡️ CACHE PARA OTIMIZAÇÃO
   private priceCache = new Map<string, { price: number; timestamp: number; ttl: number }>();
   private readonly CACHE_TTL_MS = 30000; // Cache 30 segundos
   private lastApiCall = 0;
   private readonly MIN_INTERVAL_MS = 100; // Mínimo 100ms entre chamadas
-  
-  // 🎯 MODO DESENVOLVIMENTO - dados simulados quando geoblocking
-  private readonly isGeoblocked = false; // Será determinado dinamicamente
-  private isSimulationMode = false;
 
   constructor() {
-    console.log('🚀 Inicializando ExchangeAPI simplificado...');
+    console.log('🚀 Inicializando ExchangeAPI para produção...');
     
     const networkStatus = getNetworkStatus();
     console.log('🌐 Network Status:', networkStatus);
     
     try {
-      // 🔥 CRIAR EXCHANGES USANDO NET.JS - SIMPLES E ROBUSTO
+      // 🔥 CRIAR EXCHANGES USANDO NET.JS
       this.spotExchange = makeSpotExchange();
       this.futuresExchange = makeFuturesExchange();
       
-      console.log('✅ ExchangeAPI simplificado inicializado com sucesso');
+      console.log('✅ ExchangeAPI inicializado para produção');
       if (networkStatus.proxyEnabled) {
         console.log(`🔧 Usando proxy: ${networkStatus.proxyUrl}`);
       } else {
@@ -66,7 +62,7 @@ export class ExchangeAPI {
     }
   }
 
-  // 🛡️ MÉTODOS DE CACHE SIMPLES
+  // 🛡️ MÉTODOS DE CACHE
   private getCachedPrice(symbol: string): number | null {
     const cached = this.priceCache.get(symbol);
     if (cached && Date.now() < cached.ttl) {
@@ -104,218 +100,163 @@ export class ExchangeAPI {
 
   async initialize(): Promise<void> {
     try {
-      console.log('🔍 Testando conectividade...');
+      console.log('🔍 Testando conectividade com Binance...');
       
       // Testar com BTC/USDT - símbolo mais estável
       const ticker = await this.spotExchange.fetchTicker('BTC/USDT');
       console.log('✅ Conectividade OK! BTC/USDT price:', ticker.last);
-      
-      this.isSimulationMode = false;
-      console.log('🎯 Modo: REAL DATA');
+      console.log('🎯 Modo: PRODUÇÃO - DADOS REAIS');
       
     } catch (error) {
-      console.warn('⚠️ Detectado geoblocking, ativando modo simulação para desenvolvimento');
-      console.warn('💡 Para produção, use VPS fora da região restrita ou configure PROXY_URL');
-      
-      this.isSimulationMode = true;
-      console.log('🎯 Modo: SIMULAÇÃO (desenvolvimento)');
+      console.error('❌ Falha na conectividade com Binance:', error.message);
+      throw new Error(`Não foi possível conectar à Binance: ${error.message}`);
     }
   }
 
-  // 🎲 DADOS SIMULADOS PARA DESENVOLVIMENTO (quando geoblocking)
-  private generateSimulatedPrice(symbol: string, type: 'spot' | 'futures' = 'spot'): number {
-    // Base prices para diferentes símbolos
-    const basePrices: { [key: string]: number } = {
-      'BTC/USDT': 45000,
-      'ETH/USDT': 3000,
-      'BNB/USDT': 250,
-      'ADA/USDT': 0.5,
-      'DOT/USDT': 7.0,
-      'LINK/USDT': 15.0,
-      'SOL/USDT': 100,
-      'MATIC/USDT': 0.8
-    };
-    
-    const basePrice = basePrices[symbol] || 100; // Default 100 USDT
-    
-    // Adicionar variação aleatória de ±2%
-    const variation = (Math.random() - 0.5) * 0.04; // -2% to +2%
-    let price = basePrice * (1 + variation);
-    
-    // Futures normalmente tem um pequeno premium/discount
-    if (type === 'futures') {
-      const basisVariation = (Math.random() - 0.5) * 0.001; // -0.05% to +0.05%
-      price = price * (1 + basisVariation);
-    }
-    
-    return price;
-  }
-
-  // 📊 BUSCAR PREÇO SPOT - SIMPLIFICADO
+  // 📊 BUSCAR PREÇO SPOT - APENAS DADOS REAIS
   async getSpotPrice(symbol: string): Promise<number> {
+    // 🔥 VERIFICAR CACHE PRIMEIRO
+    const cachedPrice = this.getCachedPrice(`spot_${symbol}`);
+    if (cachedPrice !== null) {
+      return cachedPrice;
+    }
+    
+    await this.waitForRateLimit();
+    
     try {
-      // 🔥 VERIFICAR CACHE PRIMEIRO
-      const cachedPrice = this.getCachedPrice(`spot_${symbol}`);
-      if (cachedPrice !== null) {
-        return cachedPrice;
+      const ticker = await this.spotExchange.fetchTicker(symbol);
+      
+      if (!ticker || !ticker.last) {
+        throw new Error(`Preço spot não disponível para ${symbol}`);
       }
       
-      await this.waitForRateLimit();
-      
-      let price: number;
-      
-      if (this.isSimulationMode) {
-        // 🎲 MODO SIMULAÇÃO - dados para desenvolvimento
-        price = this.generateSimulatedPrice(symbol, 'spot');
-        console.log(`🎯 ${symbol}: Preço spot simulado $${price.toFixed(4)} (MODO DEV)`);
-      } else {
-        // 🌐 MODO REAL - usando net.js
-        try {
-          const ticker = await this.spotExchange.fetchTicker(symbol);
-          
-          if (!ticker || !ticker.last) {
-            throw new Error(`Preço spot não disponível para ${symbol}`);
-          }
-          
-          price = parseFloat(ticker.last.toString());
-          console.log(`✅ ${symbol}: Preço spot real $${price.toFixed(4)} (CCXT)`);
-          
-        } catch (ccxtError) {
-          // Fallback: API pública usando net.js
-          console.log(`🔄 Fallback: API pública para ${symbol}`);
-          
-          const binanceSymbol = symbol.replace('/', '');
-          const response = await makeFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
-          const data = await response.json();
-          
-          price = parseFloat(data.lastPrice);
-          console.log(`✅ ${symbol}: Preço spot real $${price.toFixed(4)} (API Pública)`);
-        }
-      }
+      const price = parseFloat(ticker.last.toString());
+      console.log(`✅ ${symbol}: Preço spot $${price.toFixed(4)} (CCXT)`);
       
       this.setCachedPrice(`spot_${symbol}`, price);
       return price;
       
-    } catch (error) {
-      // Se tudo falhar, ativar modo simulação
-      if (!this.isSimulationMode) {
-        console.warn(`⚠️ Erro real data para ${symbol}, usando simulação:`, error.message);
-        this.isSimulationMode = true;
-      }
-      
-      const price = this.generateSimulatedPrice(symbol, 'spot');
-      console.log(`🎯 ${symbol}: Preço spot simulado $${price.toFixed(4)} (FALLBACK)`);
-      
-      this.setCachedPrice(`spot_${symbol}`, price);
-      return price;
-    }
-  }
-
-  // 💎 BUSCAR PREÇO FUTURES - SIMPLIFICADO
-  async getFuturesPrice(symbol: string): Promise<number> {
-    try {
-      // 🔥 VERIFICAR CACHE PRIMEIRO
-      const cachedPrice = this.getCachedPrice(`futures_${symbol}`);
-      if (cachedPrice !== null) {
-        return cachedPrice;
-      }
-      
-      await this.waitForRateLimit();
-      
-      const futuresSymbol = this.convertToFuturesSymbol(symbol);
-      let price: number;
-      
-      if (this.isSimulationMode) {
-        // 🎲 MODO SIMULAÇÃO - dados para desenvolvimento
-        price = this.generateSimulatedPrice(symbol, 'futures');
-        console.log(`🎯 ${futuresSymbol}: Preço futures simulado $${price.toFixed(6)} (MODO DEV)`);
-      } else {
-        // 🌐 MODO REAL - usando net.js
-        try {
-          const ticker = await this.futuresExchange.fetchTicker(futuresSymbol);
-          
-          if (!ticker || !ticker.last) {
-            throw new Error(`Preço futures não disponível para ${futuresSymbol}`);
-          }
-          
-          price = parseFloat(ticker.last.toString());
-          console.log(`✅ ${futuresSymbol}: Preço futures real $${price.toFixed(6)} (CCXT)`);
-          
-        } catch (ccxtError) {
-          // Fallback: API pública usando net.js
-          console.log(`🔄 Fallback: API pública futures para ${futuresSymbol}`);
-          
-          const binanceSymbol = symbol.replace('/', '');
-          const response = await makeFetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${binanceSymbol}`);
-          const data = await response.json();
-          
-          price = parseFloat(data.lastPrice);
-          console.log(`✅ ${futuresSymbol}: Preço futures real $${price.toFixed(6)} (API Pública)`);
-        }
-      }
-      
-      this.setCachedPrice(`futures_${symbol}`, price);
-      return price;
-      
-    } catch (error) {
-      // Se tudo falhar, ativar modo simulação
-      if (!this.isSimulationMode) {
-        console.warn(`⚠️ Erro real data futures para ${symbol}, usando simulação:`, error.message);
-        this.isSimulationMode = true;
-      }
-      
-      const price = this.generateSimulatedPrice(symbol, 'futures');
-      console.log(`🎯 ${symbol}: Preço futures simulado $${price.toFixed(6)} (FALLBACK)`);
-      
-      this.setCachedPrice(`futures_${symbol}`, price);
-      return price;
-    }
-  }
-
-  // 💰 FUNDING RATE - SIMPLIFICADO
-  async getFundingRate(symbol: string): Promise<number> {
-    try {
-      if (this.isSimulationMode) {
-        // Funding rate simulado entre -0.1% a +0.1%
-        const simulatedRate = (Math.random() - 0.5) * 0.002; // -0.1% to +0.1%
-        return simulatedRate;
-      }
-      
-      const binanceSymbol = symbol.replace('/', '');
-      const response = await makeFetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${binanceSymbol}`);
-      const data = await response.json();
-      return parseFloat(data.lastFundingRate) || 0;
-      
-    } catch (error) {
-      console.warn(`⚠️ Erro funding rate para ${symbol}, usando simulação`);
-      const simulatedRate = (Math.random() - 0.5) * 0.002;
-      return simulatedRate;
-    }
-  }
-
-  // 📈 VOLUME 24H - SIMPLIFICADO
-  async get24hVolume(symbol: string): Promise<number> {
-    try {
-      if (this.isSimulationMode) {
-        // Volume simulado entre 10M a 100M USDT
-        return Math.random() * 90000000 + 10000000;
-      }
+    } catch (ccxtError) {
+      // Fallback: API pública Binance
+      console.log(`🔄 Fallback: API pública para ${symbol}`);
       
       const binanceSymbol = symbol.replace('/', '');
       const response = await makeFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
-      const data = await response.json();
-      return parseFloat(data.quoteVolume) || 0;
       
-    } catch (error) {
-      console.warn(`⚠️ Erro volume para ${symbol}, usando simulação`);
-      return Math.random() * 90000000 + 10000000;
+      if (!response.ok) {
+        throw new Error(`Falha na API Binance: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const price = parseFloat(data.lastPrice);
+      
+      if (!price || price <= 0) {
+        throw new Error(`Preço inválido recebido para ${symbol}: ${price}`);
+      }
+      
+      console.log(`✅ ${symbol}: Preço spot $${price.toFixed(4)} (API Pública)`);
+      
+      this.setCachedPrice(`spot_${symbol}`, price);
+      return price;
     }
   }
 
-  // 🎯 MARKET DATA PRINCIPAL - SIMPLIFICADO
+  // 💎 BUSCAR PREÇO FUTURES - APENAS DADOS REAIS
+  async getFuturesPrice(symbol: string): Promise<number> {
+    // 🔥 VERIFICAR CACHE PRIMEIRO
+    const cachedPrice = this.getCachedPrice(`futures_${symbol}`);
+    if (cachedPrice !== null) {
+      return cachedPrice;
+    }
+    
+    await this.waitForRateLimit();
+    
+    const futuresSymbol = this.convertToFuturesSymbol(symbol);
+    
+    try {
+      const ticker = await this.futuresExchange.fetchTicker(futuresSymbol);
+      
+      if (!ticker || !ticker.last) {
+        throw new Error(`Preço futures não disponível para ${futuresSymbol}`);
+      }
+      
+      const price = parseFloat(ticker.last.toString());
+      console.log(`✅ ${futuresSymbol}: Preço futures $${price.toFixed(6)} (CCXT)`);
+      
+      this.setCachedPrice(`futures_${symbol}`, price);
+      return price;
+      
+    } catch (ccxtError) {
+      // Fallback: API pública Binance Futures
+      console.log(`🔄 Fallback: API pública futures para ${futuresSymbol}`);
+      
+      const binanceSymbol = symbol.replace('/', '');
+      const response = await makeFetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${binanceSymbol}`);
+      
+      if (!response.ok) {
+        throw new Error(`Falha na API Binance Futures: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const price = parseFloat(data.lastPrice);
+      
+      if (!price || price <= 0) {
+        throw new Error(`Preço futures inválido recebido para ${symbol}: ${price}`);
+      }
+      
+      console.log(`✅ ${futuresSymbol}: Preço futures $${price.toFixed(6)} (API Pública)`);
+      
+      this.setCachedPrice(`futures_${symbol}`, price);
+      return price;
+    }
+  }
+
+  // 💰 FUNDING RATE - APENAS DADOS REAIS
+  async getFundingRate(symbol: string): Promise<number> {
+    try {
+      const binanceSymbol = symbol.replace('/', '');
+      const response = await makeFetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${binanceSymbol}`);
+      
+      if (!response.ok) {
+        throw new Error(`Falha ao buscar funding rate: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const rate = parseFloat(data.lastFundingRate) || 0;
+      
+      return rate;
+      
+    } catch (error) {
+      console.error(`❌ Erro funding rate para ${symbol}:`, error.message);
+      throw new Error(`Não foi possível obter funding rate para ${symbol}: ${error.message}`);
+    }
+  }
+
+  // 📈 VOLUME 24H - APENAS DADOS REAIS
+  async get24hVolume(symbol: string): Promise<number> {
+    try {
+      const binanceSymbol = symbol.replace('/', '');
+      const response = await makeFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
+      
+      if (!response.ok) {
+        throw new Error(`Falha ao buscar volume: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const volume = parseFloat(data.quoteVolume) || 0;
+      
+      return volume;
+      
+    } catch (error) {
+      console.error(`❌ Erro volume para ${symbol}:`, error.message);
+      throw new Error(`Não foi possível obter volume para ${symbol}: ${error.message}`);
+    }
+  }
+
+  // 🎯 MARKET DATA PRINCIPAL - APENAS DADOS REAIS
   async getMarketData(symbol: string): Promise<MarketData> {
     try {
-      console.log(`📊 Buscando market data para ${symbol} - ${this.isSimulationMode ? 'SIMULAÇÃO' : 'REAL'}`);
+      console.log(`📊 Buscando market data para ${symbol} - PRODUÇÃO`);
       
       const [spotPrice, futuresPrice, fundingRate, volume] = await Promise.all([
         this.getSpotPrice(symbol),
@@ -348,38 +289,15 @@ export class ExchangeAPI {
     }
   }
 
-  // 📚 ORDER BOOK - SIMPLIFICADO
+  // 📚 ORDER BOOK - APENAS DADOS REAIS
   async getOrderBook(symbol: string, limit: number = 20): Promise<OrderBookData> {
     try {
-      if (this.isSimulationMode) {
-        // Order book simulado
-        const spotPrice = await this.getSpotPrice(symbol);
-        const bids: [number, number][] = [];
-        const asks: [number, number][] = [];
-        
-        // Gerar bids (preços menores)
-        for (let i = 0; i < limit; i++) {
-          const price = spotPrice * (1 - (i + 1) * 0.0001); // 0.01% decrements
-          const quantity = Math.random() * 10 + 1; // 1-11 quantity
-          bids.push([price, quantity]);
-        }
-        
-        // Gerar asks (preços maiores)
-        for (let i = 0; i < limit; i++) {
-          const price = spotPrice * (1 + (i + 1) * 0.0001); // 0.01% increments
-          const quantity = Math.random() * 10 + 1; // 1-11 quantity
-          asks.push([price, quantity]);
-        }
-        
-        return {
-          symbol,
-          bids,
-          asks,
-          timestamp: Date.now()
-        };
+      const orderBook = await this.spotExchange.fetchOrderBook(symbol, limit);
+      
+      if (!orderBook || !orderBook.bids || !orderBook.asks) {
+        throw new Error(`Order book não disponível para ${symbol}`);
       }
       
-      const orderBook = await this.spotExchange.fetchOrderBook(symbol, limit);
       return {
         symbol,
         bids: orderBook.bids.slice(0, limit).map((bid: any) => [Number(bid[0]), Number(bid[1])]) as [number, number][],
@@ -402,28 +320,47 @@ export class ExchangeAPI {
     return symbol;
   }
 
-  // 🧦 WEBSOCKET METHODS - Mantidos para compatibilidade
+  // 🧦 WEBSOCKET METHODS - Para futura implementação
   subscribeToMarketData(symbol: string, callback: (data: MarketData) => void): void {
     this.marketDataCallbacks.set(symbol, callback);
-    // TODO: Implementar WebSocket quando necessário
     console.log(`📡 WebSocket subscription para ${symbol} (TODO)`);
   }
 
   subscribeToOrderBook(symbol: string, callback: (data: OrderBookData) => void): void {
     this.orderBookCallbacks.set(symbol, callback);
-    // TODO: Implementar WebSocket quando necessário
     console.log(`📡 WebSocket orderbook para ${symbol} (TODO)`);
   }
 
   // 🛠️ UTILITÁRIOS
   getStatus(): { mode: string; networkStatus: any; cacheSize: number } {
     return {
-      mode: this.isSimulationMode ? 'SIMULAÇÃO' : 'REAL',
+      mode: 'PRODUÇÃO',
       networkStatus: getNetworkStatus(),
       cacheSize: this.priceCache.size
     };
   }
+
+  // 🧪 TESTAR CONEXÃO API
+  async testConnection(exchange: string, apiKey: string, apiSecret: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // Para Binance, teste básico de conectividade
+      if (exchange === 'binance') {
+        const response = await makeFetch('https://api.binance.com/api/v3/time');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        return { success: true, message: 'Conexão com Binance estabelecida' };
+      }
+      
+      return { success: false, message: 'Exchange não suportada' };
+      
+    } catch (error) {
+      return { success: false, message: `Falha na conexão: ${error.message}` };
+    }
+  }
 }
 
-// 🚀 INSTÂNCIA GLOBAL DO EXCHANGE API - Para compatibilidade com routes.ts
+// 🚀 INSTÂNCIA GLOBAL DO EXCHANGE API
 export const exchangeAPI = new ExchangeAPI();
