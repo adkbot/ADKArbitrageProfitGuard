@@ -435,23 +435,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 📊 Endpoint para tentativas de execução em tempo real
   app.get('/api/execution/attempts', async (req, res) => {
     try {
-      const analysisEngine = await import('./analysis-engine.js').then(m => m.analysisEngine);
       if (!analysisEngine) {
-        return res.status(503).json({ error: 'Analysis engine não inicializado' });
+        return res.status(503).json({ 
+          error: 'Analysis engine não inicializado',
+          attempts: [],
+          total: 0,
+          timestamp: Date.now()
+        });
       }
       
-      const limit = parseInt(req.query.limit as string) || 10;
+      const limit = parseInt(req.query.limit as string) || 20;
       const attempts = analysisEngine.getExecutionAttempts(limit);
       
       res.json({
         success: true,
-        attempts,
-        total: attempts.length,
+        attempts: attempts || [],
+        total: (attempts || []).length,
         timestamp: Date.now()
       });
     } catch (error) {
       console.error('❌ Erro fetching execution attempts:', error);
-      res.status(500).json({ error: 'Failed to fetch execution attempts' });
+      res.status(500).json({ 
+        error: 'Failed to fetch execution attempts',
+        attempts: [],
+        total: 0,
+        timestamp: Date.now()
+      });
     }
   });
 

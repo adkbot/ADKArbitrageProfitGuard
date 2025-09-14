@@ -8,7 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DollarSign, Percent, Clock, Activity, TrendingUp, BarChart3, RefreshCw } from 'lucide-react';
+import { DollarSign, Percent, Clock, Activity, TrendingUp, BarChart3, RefreshCw, Zap, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';
 
@@ -37,10 +37,18 @@ export default function HomePage() {
     refetchInterval: 10000,
     staleTime: 5000,
   });
+
+  // 📊 BUSCAR TENTATIVAS DE EXECUÇÃO EM TEMPO REAL
+  const { data: executionData = {}, isLoading: loadingExecutions } = useQuery({
+    queryKey: ['/api/execution/attempts'],
+    refetchInterval: 2000, // Atualização muito rápida para mostrar tentativas
+    staleTime: 1000,
+  });
   // 🔥 PROCESSAMENTO DE DADOS REAIS APENAS
   const opportunitiesArray = Array.isArray(opportunities) ? opportunities : [];
   const tradesArray = Array.isArray(trades) ? trades : [];
   const botDataTyped = botData as { activeTrades?: number; todayTrades?: number; pairs?: string[] } || {};
+  const executionAttempts = (executionData as any)?.attempts || [];
   
   const topOpportunities = opportunitiesArray
     .sort((a: any, b: any) => Math.abs(b.basisPercent) - Math.abs(a.basisPercent))
@@ -50,6 +58,41 @@ export default function HomePage() {
   const avgBasis = topOpportunities.length > 0 
     ? topOpportunities.reduce((sum: number, opp: any) => sum + Math.abs(opp.basisPercent), 0) / topOpportunities.length
     : 0;
+
+  // 🔥 FUNÇÃO HELPER - Verificar status de execução por símbolo
+  const getExecutionStatus = (symbol: string) => {
+    const recentAttempt = executionAttempts
+      .filter((attempt: any) => attempt.symbol === symbol)
+      .sort((a: any, b: any) => b.timestamp - a.timestamp)[0];
+    
+    if (!recentAttempt) return null;
+    
+    // Verificar se a tentativa é recente (últimos 2 minutos)
+    const isRecent = (Date.now() - recentAttempt.timestamp) < 120000;
+    if (!isRecent) return null;
+    
+    return {
+      status: recentAttempt.status,
+      reason: recentAttempt.failureReason,
+      timestamp: recentAttempt.timestamp
+    };
+  };
+
+  // 🔥 FUNÇÃO HELPER - Obter ícone de status de execução
+  const getExecutionIcon = (status: string) => {
+    switch (status) {
+      case 'executing':
+      case 'in_progress':
+        return <Loader className="w-4 h-4 animate-spin text-blue-500" />;
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'error':
+      case 'failed':
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
 
   // Calcular métricas reais baseadas nos dados da API
   const realMetrics = [
@@ -93,6 +136,13 @@ export default function HomePage() {
       value: botDataTyped.pairs?.length || 0,
       icon: <Clock className="w-4 h-4" />,
       description: 'em análise'
+    },
+    {
+      id: 'execution-attempts',
+      title: 'Tentativas Execução',
+      value: executionAttempts.length,
+      icon: <Zap className="w-4 h-4" />,
+      description: 'registradas hoje'
     }
   ];
 
@@ -219,9 +269,23 @@ export default function HomePage() {
                       <Badge variant={index < 5 ? 'default' : 'outline'}>
                         {opportunity.symbol}
                       </Badge>
-                      <Badge variant={opportunity.basisPercent > 0 ? 'default' : 'destructive'} className="text-xs">
-                        #{index + 1}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {/* 🔥 INDICADOR DE EXECUÇÃO EM TEMPO REAL */}
+                        {(() => {
+                          const execStatus = getExecutionStatus(opportunity.symbol);
+                          if (execStatus) {
+                            return (
+                              <div className="flex items-center gap-1" title={`Status: ${execStatus.status} ${execStatus.reason ? `- ${execStatus.reason}` : ''}`}>
+                                {getExecutionIcon(execStatus.status)}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        <Badge variant={opportunity.basisPercent > 0 ? 'default' : 'destructive'} className="text-xs">
+                          #{index + 1}
+                        </Badge>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -243,9 +307,29 @@ export default function HomePage() {
                         </span>
                       </div>
                       <div className="pt-2 border-t">
-                        <p className="text-xs text-muted-foreground">
-                          Lucro Est.: {opportunity.potentialProfit?.toFixed(4)}%
-                        </p>
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs text-muted-foreground">
+                            Lucro Est.: {opportunity.potentialProfit?.toFixed(4)}%
+                          </p>
+                          {/* 🔥 STATUS DE EXECUÇÃO DETALHADO */}
+                          {(() => {
+                            const execStatus = getExecutionStatus(opportunity.symbol);
+                            if (execStatus && execStatus.status === 'error' && execStatus.reason) {
+                              return (
+                                <p className="text-xs text-red-500" title={execStatus.reason}>
+                                  {execStatus.reason.includes('Saldo insuficiente') ? '💰 Saldo ⚠️' : '❌ Erro'}
+                                </p>
+                              );
+                            }
+                            if (execStatus && execStatus.status === 'success') {
+                              return <p className="text-xs text-green-500">✅ Executado</p>;
+                            }
+                            if (execStatus && execStatus.status === 'executing') {
+                              return <p className="text-xs text-blue-500">⚡ Executando...</p>;
+                            }
+                            return null;
+                          })()}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
