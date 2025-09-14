@@ -139,10 +139,29 @@ export class ExchangeAPI {
         return price;
         
       } catch (ccxtError) {
-        // Fallback: API pública Binance
+        // Fallback: API pública Binance com data.binance.com primeiro
         console.log(`🔄 Fallback: API pública para ${symbol}`);
         
         const binanceSymbol = symbol.replace('/', '');
+        
+        // Tenta primeiro data.binance.com (menos restritivo para geoblocking)
+        try {
+          const response = await makeFetch(`https://data.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
+          if (response.ok) {
+            const data = await response.json();
+            const price = parseFloat(data.lastPrice);
+            
+            if (price && price > 0) {
+              console.log(`✅ ${symbol}: Preço spot $${price.toFixed(4)} (data.binance.com)`);
+              this.setCachedPrice(`spot_${symbol}`, price);
+              return price;
+            }
+          }
+        } catch (dataError) {
+          console.log(`⚠️ data.binance.com falhou para ${symbol}, tentando api.binance.com`);
+        }
+        
+        // Fallback para api.binance.com
         const response = await makeFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
         
         if (!response.ok) {

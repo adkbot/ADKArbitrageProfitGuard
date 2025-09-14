@@ -1,32 +1,43 @@
 // 🌐 SISTEMA DE REDE SIMPLIFICADO - Robusticidade sem complexidade
-// Baseado na recomendação "colar e rodar" - proxy opcional via PROXY_URL
+// Baseado na recomendação "colar e rodar" - proxy opcional via PROXY_URL ou SOCKS5
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import ccxt from 'ccxt';
 import { http } from './http-client.js';
 
-// 🔧 CONFIGURAÇÃO SIMPLES - apenas PROXY_URL opcional
-const { PROXY_URL, BINANCE_API_KEY, BINANCE_SECRET_KEY } = process.env;
+// 🔧 CONFIGURAÇÃO SIMPLES - PROXY_URL ou SOCKS5 opcional
+const { PROXY_URL, PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT, BINANCE_API_KEY, BINANCE_SECRET_KEY } = process.env;
 
 /**
- * 🚀 CRIA AGENTE PROXY APENAS SE PROXY_URL ESTIVER DEFINIDO
+ * 🚀 CRIA AGENTE PROXY (SOCKS5 ou HTTP)
+ * - Prioridade: SOCKS5 primeiro, depois HTTP
  * - Sem autenticação complexa
- * - Sem fallbacks múltiplos
- * - Se PROXY_URL vazio → conexão direta
+ * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  if (!PROXY_URL || PROXY_URL.trim() === '') {
-    console.log('🌐 Net: Proxy URL não definido - usando conexão DIRETA');
-    return undefined;
+  // Prioridade: SOCKS5 primeiro
+  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
+    try {
+      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
+      console.log(`🔧 Net: Criando SOCKS5 proxy agent: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
+      return new SocksProxyAgent(socksProxy);
+    } catch (error) {
+      console.error('❌ Net: Erro criando SOCKS5 proxy agent:', error.message);
+    }
   }
   
-  try {
-    console.log('🔧 Net: Criando proxy agent para:', redactUrl(PROXY_URL));
-    return new HttpsProxyAgent(PROXY_URL);
-  } catch (error) {
-    console.error('❌ Net: Erro criando proxy agent:', error.message);
-    console.log('🌐 Net: Fallback para conexão DIRETA');
-    return undefined;
+  // Fallback para HTTP proxy
+  if (PROXY_URL && PROXY_URL.trim() !== '') {
+    try {
+      console.log('🔧 Net: Criando HTTP proxy agent para:', redactUrl(PROXY_URL));
+      return new HttpsProxyAgent(PROXY_URL);
+    } catch (error) {
+      console.error('❌ Net: Erro criando HTTP proxy agent:', error.message);
+    }
   }
+  
+  console.log('🌐 Net: Nenhum proxy definido - usando conexão DIRETA');
+  return undefined;
 }
 
 /**
@@ -139,9 +150,17 @@ function redactUrl(url) {
  * 📊 STATUS DO SISTEMA DE REDE
  */
 export function getNetworkStatus() {
+  const socks5Enabled = !!(PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT);
+  const httpProxyEnabled = !!(PROXY_URL && PROXY_URL.trim() !== '');
+  
   return {
-    proxyEnabled: !!PROXY_URL && PROXY_URL.trim() !== '',
-    proxyUrl: PROXY_URL ? redactUrl(PROXY_URL) : null,
+    proxyEnabled: socks5Enabled || httpProxyEnabled,
+    proxyType: socks5Enabled ? 'SOCKS5' : httpProxyEnabled ? 'HTTP' : 'NONE',
+    proxyUrl: socks5Enabled 
+      ? `${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}` 
+      : httpProxyEnabled 
+        ? redactUrl(PROXY_URL) 
+        : null,
     hasApiKey: !!BINANCE_API_KEY,
     hasSecret: !!BINANCE_SECRET_KEY,
   };
