@@ -28,6 +28,7 @@ export class AnalysisEngine {
   private isRunning = false;
   private priceHistory: Map<string, number[]> = new Map();
   private isExecutingTrade: boolean = false; // 🔐 Lock global para execuções
+  private executionAttempts: any[] = []; // 📊 Log de tentativas de execução
 
   constructor(exchangeAPI: ExchangeAPI, storage: IStorage) {
     this.exchangeAPI = exchangeAPI;
@@ -318,13 +319,35 @@ export class AnalysisEngine {
    Lucro Esperado: ${signal.profitPotential.toFixed(3)}%
       `);
 
-      // Verificar se há saldo suficiente
+      // 💰 Buscar saldos da carteira...
+      console.log(`💰 Buscando saldos da carteira...`);
       const balance = await this.exchangeAPI.getAccountBalance();
       const availableSpot = parseFloat(balance.spot?.USDT?.available?.toString() || '0');
       const availableFutures = parseFloat(balance.futures?.USDT?.available?.toString() || '0');
       
+      console.log(`💰 Saldos - Spot: $${availableSpot} | Futures: $${availableFutures}`);
+      
+      // 📊 Registrar tentativa de execução (independentemente do resultado)
+      const attempt = {
+        symbol: signal.symbol,
+        strategy: signal.signal,
+        expectedProfit: signal.profitPotential,
+        capitalRequired: usdtValue,
+        availableSpot,
+        availableFutures,
+        timestamp: Date.now(),
+        status: 'attempting'
+      };
+      
       if (availableSpot < usdtValue || availableFutures < usdtValue) {
+        const reason = availableSpot < usdtValue ? 
+          `Saldo spot insuficiente: $${availableSpot.toFixed(2)} < $${usdtValue}` :
+          `Saldo futures insuficiente: $${availableFutures.toFixed(2)} < $${usdtValue}`;
+        
         console.log(`❌ Saldo insuficiente - Spot: $${availableSpot}, Futures: $${availableFutures}, Necessário: $${usdtValue}`);
+        
+        // 📝 Registrar tentativa falhada 
+        this.logExecutionAttempt({ ...attempt, status: 'failed', failureReason: reason });
         return;
       }
 
@@ -355,6 +378,14 @@ export class AnalysisEngine {
       
       const savedTrade = await this.storage.createTrade(tradeData);
       
+      // 📝 Registrar tentativa bem-sucedida
+      this.logExecutionAttempt({ ...attempt, status: 'success', result: {
+        tradeId: savedTrade.id,
+        spotOrder: result.spotOrder,
+        futuresOrder: result.futuresOrder,
+        capitalUsed: result.capitalUsed
+      }});
+      
       console.log(`
 🎉 ARBITRAGEM EXECUTADA E SALVA COM SUCESSO
    Trade ID: ${savedTrade.id}
@@ -374,8 +405,36 @@ export class AnalysisEngine {
       
     } catch (error) {
       console.error(`❌ ERRO na execução automática:`, error);
+      
+      // 📝 Registrar tentativa com erro
+      const attempt = {
+        symbol: signal.symbol,
+        strategy: signal.signal,
+        expectedProfit: signal.profitPotential,
+        capitalRequired: usdtValue,
+        timestamp: Date.now(),
+        status: 'error',
+        failureReason: error.message
+      };
+      this.logExecutionAttempt(attempt);
       throw error;
     }
+  }
+
+  // 📝 MÉTODO PARA REGISTRAR TENTATIVAS DE EXECUÇÃO
+  private logExecutionAttempt(attempt: any): void {
+    // Manter apenas as últimas 50 tentativas
+    this.executionAttempts.unshift(attempt);
+    if (this.executionAttempts.length > 50) {
+      this.executionAttempts = this.executionAttempts.slice(0, 50);
+    }
+    
+    console.log(`📊 Tentativa registrada: ${attempt.symbol} - Status: ${attempt.status}`);
+  }
+
+  // 📊 MÉTODO PÚBLICO PARA OBTER TENTATIVAS DE EXECUÇÃO
+  public getExecutionAttempts(limit: number = 20): any[] {
+    return this.executionAttempts.slice(0, limit);
   }
   
   // 🔄 Verificar condições de saída de posição

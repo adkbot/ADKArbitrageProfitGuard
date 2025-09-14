@@ -432,6 +432,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 📊 Endpoint para tentativas de execução em tempo real
+  app.get('/api/execution/attempts', async (req, res) => {
+    try {
+      const analysisEngine = await import('./analysis-engine.js').then(m => m.analysisEngine);
+      if (!analysisEngine) {
+        return res.status(503).json({ error: 'Analysis engine não inicializado' });
+      }
+      
+      const limit = parseInt(req.query.limit as string) || 10;
+      const attempts = analysisEngine.getExecutionAttempts(limit);
+      
+      res.json({
+        success: true,
+        attempts,
+        total: attempts.length,
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      console.error('❌ Erro fetching execution attempts:', error);
+      res.status(500).json({ error: 'Failed to fetch execution attempts' });
+    }
+  });
+
   // 🔥 TOP 30 PAIRS ENDPOINT - SISTEMA DE RANKING DIÁRIO PARALELIZADO
   app.get('/api/arbitrage/top-pairs', async (req, res) => {
     try {
