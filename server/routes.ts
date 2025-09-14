@@ -297,6 +297,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 💰 SALDOS DA CARTEIRA (SPOT + FUTURES)
+  app.get('/api/exchange/balance', async (req, res) => {
+    try {
+      console.log('💰 API: Buscando saldos da carteira...');
+      const balance = await exchangeAPI.getAccountBalance();
+      res.json({
+        ...balance,
+        timestamp: new Date().toISOString(),
+        success: true
+      });
+    } catch (error) {
+      console.error('❌ Erro API balance:', error.message);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch account balance',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // 📊 STATUS DE OPERAÇÕES ATIVAS
+  app.get('/api/exchange/active-operations', async (req, res) => {
+    try {
+      const activeTrades = await storage.getActiveTrades();
+      const today = new Date().toISOString().split('T')[0];
+      const todayTrades = await storage.getTradesByDate(today);
+      
+      res.json({
+        activeOperations: activeTrades.length,
+        todayOperations: todayTrades.length,
+        activeTrades: activeTrades,
+        todayTrades: todayTrades,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        error: 'Failed to fetch active operations',
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Exchange health check
   app.get('/api/exchange/health', async (req, res) => {
     try {
