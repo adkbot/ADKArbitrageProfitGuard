@@ -75,15 +75,15 @@ export class MemStorage implements IStorage {
       pairs: [
         // 🪙 TOP TIER - Major Coins
         'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT',
-        'DOGE/USDT', 'SOL/USDT', 'TRX/USDT', 'MATIC/USDT', 'LTC/USDT',
+        'DOGE/USDT', 'SOL/USDT', 'TRX/USDT', 'LTC/USDT',
         
         // 💰 HIGH VOLUME - DeFi & Layer 1
-        'AVAX/USDT', 'DOT/USDT', 'SHIB/USDT', 'UNI/USDT', 'ATOM/USDT',
+        'AVAX/USDT', 'DOT/USDT', 'UNI/USDT', 'ATOM/USDT',
         'LINK/USDT', 'ETC/USDT', 'FTM/USDT', 'NEAR/USDT', 'ALGO/USDT',
         
         // 🚀 EMERGING - High Potential
         'APT/USDT', 'SUI/USDT', 'INJ/USDT', 'TIA/USDT', 'SEI/USDT',
-        'ARB/USDT', 'OP/USDT', 'BLUR/USDT', 'PEPE/USDT', 'WLD/USDT',
+        'ARB/USDT', 'OP/USDT', 'BLUR/USDT', 'WLD/USDT',
         
         // 📈 VOLATILE - Trading Opportunities  
         'FIL/USDT', 'AAVE/USDT', 'MKR/USDT', 'CRV/USDT', 'SUSHI/USDT',

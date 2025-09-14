@@ -220,13 +220,19 @@ export class ExchangeAPI {
         const response = await makeFetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${binanceSymbol}`);
         
         if (!response.ok) {
+          // Se for erro 400, o símbolo provavelmente não existe
+          if (response.status === 400) {
+            console.log(`⚠️ Símbolo futures ${symbol} não encontrado (400)`);
+            throw new Error(`Símbolo futures não encontrado: ${symbol}`);
+          }
           throw new Error(`Falha na API Binance Futures: ${response.status}`);
         }
         
         const data = await response.json();
         const price = parseFloat(data.lastPrice);
         
-        if (!price || price <= 0) {
+        if (!price || price <= 0 || isNaN(price)) {
+          console.log(`⚠️ Preço futures inválido para ${symbol}: ${price}`);
           throw new Error(`Preço futures inválido recebido para ${symbol}: ${price}`);
         }
         
@@ -248,6 +254,11 @@ export class ExchangeAPI {
       const response = await makeFetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${binanceSymbol}`);
       
       if (!response.ok) {
+        // Se for erro 400, o símbolo provavelmente não existe ou foi deslistado
+        if (response.status === 400) {
+          console.log(`⚠️ Símbolo ${symbol} não encontrado ou deslistado (400)`);
+          return 0; // Retorna 0 em vez de quebrar o sistema
+        }
         throw new Error(`Falha ao buscar funding rate: ${response.status}`);
       }
       
@@ -258,6 +269,12 @@ export class ExchangeAPI {
       
     } catch (error) {
       console.error(`❌ Erro funding rate para ${symbol}:`, error.message);
+      
+      // Para erros conhecidos, não quebrar o sistema
+      if (error.message.includes('400') || error.message.includes('Invalid symbol')) {
+        console.log(`🔇 Ignorando símbolo problemático: ${symbol}`);
+        return 0;
+      }
       
       throw new Error(`Não foi possível obter funding rate para ${symbol}: ${error.message}`);
     }
@@ -296,6 +313,11 @@ export class ExchangeAPI {
         this.getFundingRate(symbol),
         this.get24hVolume(symbol)
       ]);
+
+      // Validar se todos os preços são válidos
+      if (!spotPrice || !futuresPrice || isNaN(spotPrice) || isNaN(futuresPrice) || spotPrice <= 0 || futuresPrice <= 0) {
+        throw new Error(`Preços inválidos para ${symbol}: spot=${spotPrice}, futures=${futuresPrice}`);
+      }
 
       const basis = futuresPrice - spotPrice;
       const basisPercent = spotPrice > 0 ? (basis / spotPrice) * 100 : 0;
