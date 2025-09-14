@@ -41,9 +41,23 @@ interface UserStatus {
   };
 }
 
+interface ArbitrageOpportunity {
+  symbol: string;
+  spotPrice: number;
+  futuresPrice: number;
+  basisPercent: number;
+  volume24h: number;
+  fundingRate: number;
+  signal: 'long_spot_short_futures' | 'short_spot_long_futures';
+  potentialProfit: number;
+  confidence: number;
+  netProfitEstimate: number;
+}
+
 export default function MultiuserDashboard() {
   const [user, setUser] = useState<UserData | null>(null);
   const [status, setStatus] = useState<UserStatus | null>(null);
+  const [opportunities, setOpportunities] = useState<ArbitrageOpportunity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -68,12 +82,17 @@ export default function MultiuserDashboard() {
     }
   }, []);
 
-  // Auto-refresh status every 30s
+  // Auto-refresh status and opportunities every 30s
   useEffect(() => {
     if (user?.token) {
       const interval = setInterval(() => {
         fetchUserStatus(user.token!);
+        fetchOpportunities();
       }, 30000);
+      
+      // Initial fetch
+      fetchOpportunities();
+      
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -148,6 +167,15 @@ export default function MultiuserDashboard() {
       if (err.message.includes('Token')) {
         logout();
       }
+    }
+  };
+
+  const fetchOpportunities = async () => {
+    try {
+      const result = await apiCall('/arbitrage/opportunities');
+      setOpportunities(result || []);
+    } catch (err: any) {
+      console.error('Error fetching opportunities:', err);
     }
   };
 
@@ -341,6 +369,7 @@ export default function MultiuserDashboard() {
         <Tabs defaultValue="control" className="space-y-4">
           <TabsList>
             <TabsTrigger value="control" data-testid="tab-control">Controle</TabsTrigger>
+            <TabsTrigger value="market" data-testid="tab-market">Market Data</TabsTrigger>
             <TabsTrigger value="config" data-testid="tab-config">Configurações</TabsTrigger>
             <TabsTrigger value="trades" data-testid="tab-trades">Trades</TabsTrigger>
           </TabsList>
@@ -389,6 +418,90 @@ export default function MultiuserDashboard() {
                       <span>Limite diário:</span>
                       <span>{status.limits.maxDailyTrades} trades</span>
                     </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Market Data Tab */}
+          <TabsContent value="market">
+            <Card>
+              <CardHeader>
+                <CardTitle>Oportunidades de Arbitragem - DADOS REAIS</CardTitle>
+                <CardDescription>
+                  Preços em tempo real da Binance via Frankfurt Proxy. Atualização automática a cada 30s.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {opportunities.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {opportunities.slice(0, 8).map((opp, index) => (
+                        <Card key={index} className="border-l-4 border-l-blue-500">
+                          <CardHeader className="pb-3">
+                            <div className="flex justify-between items-center">
+                              <CardTitle className="text-lg">{opp.symbol}</CardTitle>
+                              <Badge variant={opp.potentialProfit > 0.1 ? 'default' : 'secondary'}>
+                                {opp.signal === 'long_spot_short_futures' ? 'COMPRAR SPOT' : 'VENDER SPOT'}
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <div className="text-sm text-muted-foreground">Preço Spot</div>
+                                <div className="text-lg font-bold text-green-600" data-testid={`spot-price-${opp.symbol}`}>
+                                  ${opp.spotPrice.toFixed(opp.spotPrice >= 1 ? 2 : 6)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-sm text-muted-foreground">Preço Futures</div>
+                                <div className="text-lg font-bold text-blue-600" data-testid={`futures-price-${opp.symbol}`}>
+                                  ${opp.futuresPrice.toFixed(opp.futuresPrice >= 1 ? 2 : 6)}
+                                </div>
+                              </div>
+                            </div>
+                            <Separator />
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="text-sm text-muted-foreground">Diferença (Basis)</div>
+                                <div className="text-sm font-bold">{opp.basisPercent.toFixed(3)}%</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm text-muted-foreground">Lucro Potencial</div>
+                                <div className="text-lg font-bold text-orange-600" data-testid={`profit-${opp.symbol}`}>
+                                  +{opp.potentialProfit.toFixed(3)}%
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Volume 24h: ${(opp.volume24h / 1000000).toFixed(1)}M | Funding: {(opp.fundingRate * 100).toFixed(3)}%
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                    
+                    {opportunities.length > 8 && (
+                      <div className="text-center pt-4">
+                        <Badge variant="outline">
+                          +{opportunities.length - 8} outras oportunidades disponíveis
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-2">
+                      Buscando oportunidades de arbitragem...
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Sistema analisando {' '}
+                      <Badge variant="outline">60+ pares</Badge>
+                      {' '} em tempo real
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -460,16 +573,14 @@ export default function MultiuserDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {status?.trades.active.length ? (
+                {status?.trades.active > 0 ? (
                   <div className="space-y-2">
-                    {status.trades.active.map((trade: any, index: number) => (
-                      <div key={index} className="border rounded p-3">
-                        <div className="flex justify-between">
-                          <span>{trade.symbol || 'N/A'}</span>
-                          <Badge>{trade.status || 'Ativo'}</Badge>
-                        </div>
+                    <div className="border rounded p-3">
+                      <div className="flex justify-between">
+                        <span>{status.trades.active} trades ativos</span>
+                        <Badge>Ativo</Badge>
                       </div>
-                    ))}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-center text-gray-500 py-8">
