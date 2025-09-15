@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertTradeSchema, insertBotConfigSchema, insertDailyMetricsSchema } from "@shared/schema";
-import { exchangeAPI } from "./exchange";
+import { multiExchangeManager } from "./multi-exchange";
 import { AnalysisEngine } from "./analysis-engine.js";
 import publicApiRoutes from './public-api.js';
 import { UserManager } from './user-manager.js';
@@ -32,7 +32,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const result = await exchangeAPI.testConnection(exchange, apiKey, apiSecret);
+      const result = await multiExchangeManager.testConnection(exchange, apiKey, apiSecret);
       res.json(result);
       
     } catch (error) {
@@ -462,7 +462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/exchange/balance', async (req, res) => {
     try {
       console.log('💰 API: Buscando saldos da carteira...');
-      const balance = await exchangeAPI.getBalance();
+      const balance = await multiExchangeManager.getBalance();
       res.json({
         ...balance,
         timestamp: new Date().toISOString(),
@@ -504,7 +504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Exchange health check
   app.get('/api/exchange/health', async (req, res) => {
     try {
-      const isConnected = await exchangeAPI.isConnected();
+      const isConnected = await multiExchangeManager.isConnected();
       res.json({ connected: isConnected, timestamp: new Date().toISOString() });
     } catch (error) {
       res.status(500).json({ connected: false, error: 'Exchange connection failed' });
@@ -515,7 +515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/exchange/market/:symbol', async (req, res) => {
     try {
       const { symbol } = req.params;
-      const marketData = await exchangeAPI.getMarketData(symbol.toUpperCase());
+      const marketData = await multiExchangeManager.getMarketData(symbol.toUpperCase());
       res.json(marketData);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch market data' });
@@ -526,7 +526,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { symbol } = req.params;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
-      const orderBook = await exchangeAPI.getOrderBook(symbol.toUpperCase(), limit);
+      const orderBook = await multiExchangeManager.getOrderBook(symbol.toUpperCase(), limit);
       res.json(orderBook);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch order book' });
@@ -538,7 +538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const config = await storage.getBotConfig();
       const marketDataPromises = config.pairs.map(async (pair) => {
         try {
-          return await exchangeAPI.getMarketData(pair);
+          return await multiExchangeManager.getMarketData(pair);
         } catch (error) {
           console.error(`Failed to get market data for ${pair}:`, error);
           return null;
@@ -560,7 +560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const pair of config.pairs) {
         try {
-          const marketData = await exchangeAPI.getMarketData(pair);
+          const marketData = await multiExchangeManager.getMarketData(pair);
           
           // Calculate opportunity metrics
           const basisThreshold = parseFloat(config.basisEntry);
@@ -637,7 +637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 🚀 PARALELIZAR BUSCA DE DADOS PARA EVITAR 429 ERRORS
       const marketDataPromises = topPairs.map(async (pair, index) => {
         try {
-          const marketData = await exchangeAPI.getMarketData(pair);
+          const marketData = await multiExchangeManager.getMarketData(pair);
           const performanceData = await storage.getPairPerformanceData(pair);
           
           return {
@@ -695,7 +695,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Initialize exchange API
   try {
-    await exchangeAPI.initialize();
+    await multiExchangeManager.initialize();
     console.log('Exchange API initialized successfully');
   } catch (error) {
     console.error('Failed to initialize exchange API:', error);
@@ -742,7 +742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const pair of config.pairs.slice(0, 10)) { // Apenas 10 para teste
         try {
-          const marketData = await exchangeAPI.getMarketData(pair);
+          const marketData = await multiExchangeManager.getMarketData(pair);
           const performanceData = await storage.getPairPerformanceData(pair);
           
           // Calcular custos manualmente para debug

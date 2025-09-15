@@ -2,7 +2,7 @@
 // Suporte automático: Binance (principal) + Bybit (fallback sem geo-bloqueio)
 
 import ccxt from 'ccxt';
-import { makeAgent, makeFetch } from './net.js';
+import { makeAgent, makeFetch } from './net';
 
 export interface ExchangeConfig {
   name: string;
