@@ -79,8 +79,8 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
     setConnectionStatus('testing');
     
     try {
-      // Real API connection test
-      const response = await fetch('/api/test-connection', {
+      // 1. Testar conexão com a API
+      const testResponse = await fetch('/api/test-connection', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -92,14 +92,43 @@ export default function ConfigurationModal({ open, onOpenChange, onSave, current
         })
       });
       
-      const result = await response.json();
-      setConnectionStatus(result.success ? 'success' : 'error');
+      const testResult = await testResponse.json();
+      
+      if (testResult.success) {
+        // 2. 🔑 SALVAR API KEYS REAIS se o teste passou
+        console.log(`🔑 Salvando credenciais REAIS para ${config.exchange.toUpperCase()}`);
+        
+        const saveResponse = await fetch('/api/save-exchange-config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            exchange: config.exchange,
+            apiKey: config.apiKey,
+            apiSecret: config.apiSecret
+          })
+        });
+        
+        const saveResult = await saveResponse.json();
+        
+        if (saveResult.success) {
+          console.log(`✅ Credenciais ${config.exchange.toUpperCase()} salvas com sucesso!`);
+          setConnectionStatus('success');
+        } else {
+          console.error('❌ Falha ao salvar credenciais:', saveResult.message);
+          setConnectionStatus('error');
+        }
+      } else {
+        console.error('❌ Teste de conexão falhou:', testResult.message);
+        setConnectionStatus('error');
+      }
       
       setTimeout(() => {
         setConnectionStatus('idle');
       }, 3000);
     } catch (error) {
-      console.error('Connection test failed:', error);
+      console.error('❌ Erro no teste/salvamento:', error);
       setConnectionStatus('error');
       
       setTimeout(() => {

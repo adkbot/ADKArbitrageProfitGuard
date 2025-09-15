@@ -43,6 +43,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // 🔑 SALVAR API KEYS REAIS DO USUÁRIO - SEM DADOS SIMULADOS
+  app.post('/api/save-exchange-config', async (req, res) => {
+    try {
+      const { exchange, apiKey, apiSecret, passphrase } = req.body;
+      
+      if (!exchange || !apiKey || !apiSecret) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Exchange, API Key e API Secret são obrigatórios' 
+        });
+      }
+
+      console.log(`🔑 Salvando credenciais REAIS para ${exchange.toUpperCase()}`);
+      
+      // Buscar configuração atual
+      let config = await storage.getBotConfig();
+      if (!config) {
+        // Criar config padrão se não existir
+        config = await storage.updateBotConfig({
+          pairs: ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'],
+          basisEntry: 0.004,
+          basisExit: 0.0015,
+          maxNotionalUsdt: 1000,
+          maxDailyTrades: 10,
+          slippageK: 0.002,
+          fundingLookaheadH: 8,
+          wyckoffN: 100,
+          gexRefreshSec: 300,
+          arbitrageEnabled: true
+        });
+      }
+
+      // Atualizar com as API keys do usuário
+      const updateData: any = {
+        ...config,
+        selectedExchange: exchange.toLowerCase()
+      };
+
+      // Salvar credenciais específicas da exchange
+      if (exchange.toLowerCase() === 'binance') {
+        updateData.binanceApiKey = apiKey;
+        updateData.binanceApiSecret = apiSecret;
+      } else if (exchange.toLowerCase() === 'okx') {
+        updateData.okxApiKey = apiKey;
+        updateData.okxApiSecret = apiSecret;
+        if (passphrase) updateData.okxPassphrase = passphrase;
+      } else if (exchange.toLowerCase() === 'bybit') {
+        updateData.bybitApiKey = apiKey;
+        updateData.bybitApiSecret = apiSecret;
+      }
+
+      // Salvar configuração atualizada
+      await storage.updateBotConfig(updateData);
+
+      console.log(`✅ Credenciais REAIS salvas para ${exchange.toUpperCase()}`);
+      
+      res.json({ 
+        success: true, 
+        message: `Credenciais ${exchange.toUpperCase()} salvas com sucesso!`,
+        exchange: exchange.toLowerCase()
+      });
+      
+    } catch (error) {
+      console.error('❌ Erro ao salvar credenciais:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: `Erro ao salvar: ${(error as Error).message}` 
+      });
+    }
+  });
   
   // 🌐 PROXY MANAGEMENT ENDPOINTS
   app.get('/api/proxy/status', async (req, res) => {

@@ -4,6 +4,7 @@
 import WebSocket from 'ws';
 import { MultiExchangeManager } from './multi-exchange.js';
 import { fetchWithKillSwitch } from './exchange-manager.js';
+import type { IStorage } from './storage.js';
 
 export interface MarketData {
   symbol: string;
@@ -33,6 +34,7 @@ export interface OrderBookData {
  */
 export class ExchangeAPI {
   private multiExchange: MultiExchangeManager;
+  private storage: IStorage; // 🔑 Storage para credenciais reais
   private wsConnections: Map<string, WebSocket> = new Map();
   private marketDataCallbacks: Map<string, (data: MarketData) => void> = new Map();
   private orderBookCallbacks: Map<string, (data: OrderBookData) => void> = new Map();
@@ -43,10 +45,11 @@ export class ExchangeAPI {
   private lastApiCall = 0;
   private readonly MIN_INTERVAL_MS = 100; // Mínimo 100ms entre chamadas
 
-  constructor() {
+  constructor(storage: IStorage) {
     console.log('🚀 Inicializando ExchangeAPI V2 - Multi-Exchange...');
     
     this.multiExchange = new MultiExchangeManager();
+    this.storage = storage; // 🔑 Armazenar referência do storage
     
     console.log('✅ ExchangeAPI V2 inicializado');
     console.log('🎯 Modo: PRODUÇÃO MULTI-EXCHANGE - SEM GEO-BLOQUEIO');
@@ -266,60 +269,125 @@ export class ExchangeAPI {
     };
   }
 
-  // 💰 BUSCAR SALDOS DA CARTEIRA - MULTI-EXCHANGE
+  // 💰 BUSCAR SALDOS REAIS DA CARTEIRA - SEM DADOS SIMULADOS
   async getBalance(): Promise<any> {
     try {
-      console.log('💰 Buscando saldos da carteira...');
+      console.log('💰 Buscando saldos REAIS da carteira...');
       
-      const status = this.multiExchange.getStatus();
-      console.log(`💰 Buscando via ${status.activeExchange}...`);
-      
-      // 🔥 SALDOS REALISTAS SIMULADOS - SISTEMA DEMO COMPLETO
-      const spotBalance = {
-        USDT: 10000.00,  // 10k USDT para trading spot
-        BTC: 0.1,        // 0.1 BTC 
-        ETH: 2.5,        // 2.5 ETH
-        BNB: 15.0        // 15 BNB
-      };
+      // 🔑 BUSCAR CREDENCIAIS REAIS DO USUÁRIO
+      const config = await this.storage.getBotConfig();
+      if (!config || !config.selectedExchange) {
+        console.log('⚠️ Nenhuma exchange configurada - configure suas API keys primeiro');
+        return {
+          success: false,
+          error: 'Configure suas API keys primeiro',
+          message: 'Acesse Configurações para inserir suas credenciais da exchange'
+        };
+      }
 
-      const futuresBalance = {
-        USDT: 25000.00,  // 25k USDT para futuros (margem)
-        availableMargin: 22500.00,  // Margem disponível
-        usedMargin: 2500.00,        // Margem utilizada
-        totalEquity: 25000.00       // Patrimônio total
-      };
+      const exchangeName = config.selectedExchange;
+      console.log(`💰 Buscando saldos REAIS via ${exchangeName.toUpperCase()}...`);
 
-      const totalPortfolioValue = spotBalance.USDT + futuresBalance.USDT;
+      // 🔑 USAR CREDENCIAIS REAIS DO USUÁRIO
+      let apiKey, apiSecret, passphrase;
       
-      return {
-        success: true,
-        simulated: true, // 🎭 Indicador de dados simulados para demo
-        exchange: status.activeExchange,
-        lastUpdate: new Date().toISOString(),
-        spot: {
-          name: "Carteira Spot",
-          balance: spotBalance,
-          totalUSDT: spotBalance.USDT,
-          assets: Object.keys(spotBalance).length
-        },
-        futures: {
-          name: "Carteira Futures", 
-          balance: futuresBalance,
-          totalUSDT: futuresBalance.USDT,
-          availableMargin: futuresBalance.availableMargin,
-          usedMargin: futuresBalance.usedMargin,
-          marginRatio: ((futuresBalance.usedMargin / futuresBalance.totalEquity) * 100).toFixed(2)
-        },
-        summary: {
-          totalPortfolioUSDT: totalPortfolioValue,
-          spotPercentage: ((spotBalance.USDT / totalPortfolioValue) * 100).toFixed(1),
-          futuresPercentage: ((futuresBalance.USDT / totalPortfolioValue) * 100).toFixed(1)
-        }
-      };
+      if (exchangeName === 'binance') {
+        apiKey = config.binanceApiKey;
+        apiSecret = config.binanceApiSecret;
+      } else if (exchangeName === 'okx') {
+        apiKey = config.okxApiKey;
+        apiSecret = config.okxApiSecret;
+        passphrase = config.okxPassphrase;
+      } else if (exchangeName === 'bybit') {
+        apiKey = config.bybitApiKey;
+        apiSecret = config.bybitApiSecret;
+      }
+
+      if (!apiKey || !apiSecret) {
+        console.log(`⚠️ API keys não configuradas para ${exchangeName.toUpperCase()}`);
+        return {
+          success: false,
+          error: 'API keys não configuradas',
+          message: `Configure suas credenciais ${exchangeName.toUpperCase()} primeiro`
+        };
+      }
+
+      // 🌐 BUSCAR SALDOS REAIS DA EXCHANGE
+      const exchange = this.multiExchange.getExchangeInstance(exchangeName);
+      if (!exchange) {
+        throw new Error(`Exchange ${exchangeName} não disponível`);
+      }
+
+      // Configurar credenciais temporariamente para busca de saldos
+      const originalApiKey = exchange.apiKey;
+      const originalSecret = exchange.secret;
+      const originalPassword = exchange.password;
+
+      exchange.apiKey = apiKey;
+      exchange.secret = apiSecret;
+      if (passphrase) exchange.password = passphrase;
+
+      try {
+        // Buscar saldos REAIS
+        const balance = await exchange.fetchBalance();
+        console.log(`✅ Saldos REAIS obtidos de ${exchangeName.toUpperCase()}`);
+
+        // Estruturar saldos spot
+        const spotBalance = {
+          USDT: balance.USDT?.free || 0,
+          BTC: balance.BTC?.free || 0,
+          ETH: balance.ETH?.free || 0,
+          BNB: balance.BNB?.free || 0,
+          XRP: balance.XRP?.free || 0,
+          ADA: balance.ADA?.free || 0
+        };
+
+        // Calcular totais
+        const spotTotalUSDT = balance.USDT?.total || 0;
+        const totalPortfolioValue = balance.total?.USDT || spotTotalUSDT;
+        
+        return {
+          success: true,
+          real: true, // 🔑 Dados REAIS da exchange
+          exchange: exchangeName.toUpperCase(),
+          lastUpdate: new Date().toISOString(),
+          spot: {
+            name: "Carteira Spot",
+            balance: spotBalance,
+            totalUSDT: spotTotalUSDT,
+            assets: Object.keys(balance).filter(asset => (balance[asset]?.total || 0) > 0).length
+          },
+          futures: {
+            name: "Carteira Futures", 
+            balance: { USDT: balance.total?.USDT || 0 },
+            totalUSDT: balance.total?.USDT || 0,
+            availableMargin: balance.free?.USDT || 0,
+            usedMargin: (balance.total?.USDT || 0) - (balance.free?.USDT || 0),
+            marginRatio: "N/A" // Futures específico precisa endpoint separado
+          },
+          summary: {
+            totalPortfolioUSDT: totalPortfolioValue,
+            spotPercentage: totalPortfolioValue > 0 ? ((spotTotalUSDT / totalPortfolioValue) * 100).toFixed(1) : "0",
+            futuresPercentage: "0" // Será calculado quando futures for implementado
+          }
+        };
+      } finally {
+        // Restaurar credenciais originais
+        exchange.apiKey = originalApiKey;
+        exchange.secret = originalSecret;
+        exchange.password = originalPassword;
+      }
       
     } catch (error) {
-      console.error('❌ Erro buscando saldos:', error.message);
-      throw new Error(`Não foi possível buscar saldos: ${error.message}`);
+      console.error('❌ Erro buscando saldos REAIS:', error.message);
+      
+      // Retornar erro informativo
+      return {
+        success: false,
+        error: 'Erro ao buscar saldos',
+        message: `Verifique suas API keys: ${error.message}`,
+        lastUpdate: new Date().toISOString()
+      };
     }
   }
 
@@ -369,5 +437,12 @@ export class ExchangeAPI {
   }
 }
 
-// 🚀 EXPORT INSTÂNCIA GLOBAL PARA COMPATIBILIDADE
-export const exchangeAPI = new ExchangeAPI();
+// 🚀 EXPORT FACTORY FUNCTION - SERÁ INICIALIZADO NO INDEX.TS COM STORAGE
+export let exchangeAPI: ExchangeAPI;
+
+export function initializeExchangeAPI(storage: IStorage): void {
+  if (!exchangeAPI) {
+    exchangeAPI = new ExchangeAPI(storage);
+    console.log('🔑 ExchangeAPI inicializado com storage para credenciais REAIS');
+  }
+}

@@ -41,6 +41,15 @@ export const botConfig = pgTable('bot_config', {
   wyckoffN: integer('wyckoff_n').notNull(),
   gexRefreshSec: integer('gex_refresh_sec').notNull(),
   arbitrageEnabled: boolean('arbitrage_enabled').notNull().default(true),
+  // 🔑 API CREDENTIALS - DADOS REAIS DAS EXCHANGES
+  selectedExchange: text('selected_exchange'), // 'binance', 'okx', 'bybit'
+  binanceApiKey: text('binance_api_key'),
+  binanceApiSecret: text('binance_api_secret'),
+  okxApiKey: text('okx_api_key'),
+  okxApiSecret: text('okx_api_secret'),
+  okxPassphrase: text('okx_passphrase'),
+  bybitApiKey: text('bybit_api_key'),
+  bybitApiSecret: text('bybit_api_secret'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });

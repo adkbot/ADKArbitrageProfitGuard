@@ -1,0 +1,27 @@
+Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Abrindo configurações
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Configuração salva: Object
+index-DONiAms-.js:269 Configuration saved: Object
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Abrindo configurações
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Bot iniciado
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
