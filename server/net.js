@@ -185,6 +185,9 @@ export function makeFuturesExchange() {
  * - Proxy opcional via PROXY_URL
  */
 export async function makeFetch(url, options = {}) {
+  if (!url) {
+    throw new Error('URL é obrigatório para makeFetch');
+  }
   console.log('🌐 Proxied fetch:', url.length > 60 ? url.substring(0, 60) + '...' : url);
   
   const agent = makeAgent();

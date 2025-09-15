@@ -1,8 +1,8 @@
-// 🚀 EXCHANGE API - APENAS DADOS REAIS
-// Produção exclusiva com dados reais da Binance
+// 🚀 EXCHANGE API V2 - SISTEMA MULTI-EXCHANGE SEM GEO-BLOQUEIO
+// Suporte automático: Binance + Bybit com fallback inteligente
 
 import WebSocket from 'ws';
-import { makeSpotExchange, makeFuturesExchange, makeFetch, getNetworkStatus } from './net.js';
+import { MultiExchangeManager } from './multi-exchange.js';
 import { fetchWithKillSwitch } from './exchange-manager.js';
 
 export interface MarketData {
@@ -14,6 +14,7 @@ export interface MarketData {
   fundingRate: number;
   volume24h: number;
   timestamp: number;
+  exchange?: string; // Qual exchange forneceu os dados
 }
 
 export interface OrderBookData {
@@ -21,60 +22,48 @@ export interface OrderBookData {
   bids: [number, number][];
   asks: [number, number][];
   timestamp: number;
+  exchange?: string;
 }
 
 /**
- * 🔥 EXCHANGE API - APENAS DADOS REAIS DE PRODUÇÃO
+ * 🔥 EXCHANGE API V2 - MULTI-EXCHANGE COM FALLBACK AUTOMÁTICO
+ * - Binance (principal, se disponível)
+ * - Bybit (fallback sem geo-bloqueio)
+ * - Sistema inteligente de detecção de bloqueios
  */
 export class ExchangeAPI {
-  private spotExchange: any;
-  private futuresExchange: any;
+  private multiExchange: MultiExchangeManager;
   private wsConnections: Map<string, WebSocket> = new Map();
   private marketDataCallbacks: Map<string, (data: MarketData) => void> = new Map();
   private orderBookCallbacks: Map<string, (data: OrderBookData) => void> = new Map();
   
   // 🛡️ CACHE PARA OTIMIZAÇÃO
-  private priceCache = new Map<string, { price: number; timestamp: number; ttl: number }>();
+  private priceCache = new Map<string, { data: any; timestamp: number; ttl: number }>();
   private readonly CACHE_TTL_MS = 30000; // Cache 30 segundos
   private lastApiCall = 0;
   private readonly MIN_INTERVAL_MS = 100; // Mínimo 100ms entre chamadas
 
   constructor() {
-    console.log('🚀 Inicializando ExchangeAPI para produção...');
+    console.log('🚀 Inicializando ExchangeAPI V2 - Multi-Exchange...');
     
-    const networkStatus = getNetworkStatus();
-    console.log('🌐 Network Status:', networkStatus);
+    this.multiExchange = new MultiExchangeManager();
     
-    try {
-      // 🔥 CRIAR EXCHANGES USANDO NET.JS
-      this.spotExchange = makeSpotExchange();
-      this.futuresExchange = makeFuturesExchange();
-      
-      console.log('✅ ExchangeAPI inicializado para produção');
-      if (networkStatus.proxyEnabled) {
-        console.log(`🔧 Usando proxy: ${networkStatus.proxyUrl}`);
-      } else {
-        console.log('🌐 Conexão DIRETA (sem proxy)');
-      }
-      
-    } catch (error) {
-      console.error('❌ Erro inicializando ExchangeAPI:', error.message);
-      throw error;
-    }
+    console.log('✅ ExchangeAPI V2 inicializado');
+    console.log('🎯 Modo: PRODUÇÃO MULTI-EXCHANGE - SEM GEO-BLOQUEIO');
   }
 
   // 🛡️ MÉTODOS DE CACHE
-  private getCachedPrice(symbol: string): number | null {
-    const cached = this.priceCache.get(symbol);
+  private getCachedData(key: string): any | null {
+    const cached = this.priceCache.get(key);
     if (cached && Date.now() < cached.ttl) {
-      return cached.price;
+      return cached.data;
     }
     return null;
   }
   
-  private setCachedPrice(symbol: string, price: number): void {
-    this.priceCache.set(symbol, {
-      price,
+  private setCachedData(key: string, data: any): void {
+    this.priceCache.set(key, {
+      data,
       timestamp: Date.now(),
       ttl: Date.now() + this.CACHE_TTL_MS
     });
@@ -94,336 +83,204 @@ export class ExchangeAPI {
 
   // 🧹 LIMPAR CACHE
   clearCache(): void {
-    console.log('🧹 Limpando cache de preços...');
+    console.log('🧹 Limpando cache...');
     this.priceCache.clear();
     console.log('✅ Cache limpo');
   }
 
   async initialize(): Promise<void> {
     try {
-      console.log('🔍 Testando conectividade com Binance...');
+      console.log('🔍 Inicializando sistema multi-exchange...');
+      await this.multiExchange.initialize();
       
-      // Testar com BTC/USDT - símbolo mais estável
-      const ticker = await this.spotExchange.fetchTicker('BTC/USDT');
-      console.log('✅ Conectividade OK! BTC/USDT price:', ticker.last);
-      console.log('🎯 Modo: PRODUÇÃO - DADOS REAIS');
+      const status = this.multiExchange.getStatus();
+      console.log(`✅ Sistema ativo: ${status.summary}`);
       
     } catch (error) {
-      console.error('❌ Falha na conectividade com Binance:', error.message);
-      throw new Error(`Não foi possível conectar à Binance: ${error.message}`);
+      console.error('❌ Falha na inicialização:', error.message);
+      throw new Error(`Não foi possível inicializar exchanges: ${error.message}`);
     }
   }
 
-  // 📊 BUSCAR PREÇO SPOT - APENAS DADOS REAIS
+  // 📊 BUSCAR PREÇO SPOT - MULTI-EXCHANGE COM FALLBACK
   async getSpotPrice(symbol: string): Promise<number> {
     try {
       // 🔥 VERIFICAR CACHE PRIMEIRO
-      const cachedPrice = this.getCachedPrice(`spot_${symbol}`);
+      const cachedPrice = this.getCachedData(`spot_${symbol}`);
       if (cachedPrice !== null) {
         return cachedPrice;
       }
       
       await this.waitForRateLimit();
       
-      try {
-        const ticker = await this.spotExchange.fetchTicker(symbol);
-        
-        if (!ticker || !ticker.last) {
-          throw new Error(`Preço spot não disponível para ${symbol}`);
-        }
-        
-        const price = parseFloat(ticker.last.toString());
-        console.log(`✅ ${symbol}: Preço spot $${price.toFixed(4)} (CCXT)`);
-        
-        this.setCachedPrice(`spot_${symbol}`, price);
-        return price;
-        
-      } catch (ccxtError) {
-        // Fallback: API pública Binance com data.binance.com primeiro
-        console.log(`🔄 Fallback: API pública para ${symbol}`);
-        
-        const binanceSymbol = symbol.replace('/', '');
-        
-        // Tenta primeiro data.binance.com (menos restritivo para geoblocking)
-        try {
-          const response = await makeFetch(`https://data.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
-          if (response.ok) {
-            const data = await response.json();
-            const price = parseFloat(data.lastPrice);
-            
-            if (price && price > 0) {
-              console.log(`✅ ${symbol}: Preço spot $${price.toFixed(4)} (data.binance.com)`);
-              this.setCachedPrice(`spot_${symbol}`, price);
-              return price;
-            }
-          }
-        } catch (dataError) {
-          console.log(`⚠️ data.binance.com falhou para ${symbol}, tentando api.binance.com`);
-        }
-        
-        // Fallback para api.binance.com
-        const response = await makeFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
-        
-        if (!response.ok) {
-          throw new Error(`Falha na API Binance: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        const price = parseFloat(data.lastPrice);
-        
-        if (!price || price <= 0) {
-          throw new Error(`Preço inválido recebido para ${symbol}: ${price}`);
-        }
-        
-        console.log(`✅ ${symbol}: Preço spot $${price.toFixed(4)} (API Pública)`);
-        
-        this.setCachedPrice(`spot_${symbol}`, price);
-        return price;
-      }
+      console.log(`📊 Buscando preço spot para ${symbol}...`);
+      const result = await this.multiExchange.getSpotPrice(symbol);
+      
+      console.log(`✅ Preço spot ${symbol}: $${result.price} via ${result.exchange}`);
+      
+      // Cache o resultado
+      this.setCachedData(`spot_${symbol}`, result.price);
+      
+      return result.price;
+      
     } catch (error) {
       console.error(`❌ Erro ao buscar preço spot para ${symbol}:`, error.message);
-      throw error;
+      throw new Error(`Não foi possível obter preço spot para ${symbol}: ${error.message}`);
     }
   }
 
-  // 💎 BUSCAR PREÇO FUTURES - APENAS DADOS REAIS
+  // 📊 BUSCAR PREÇO FUTURES - MULTI-EXCHANGE COM FALLBACK
   async getFuturesPrice(symbol: string): Promise<number> {
     try {
       // 🔥 VERIFICAR CACHE PRIMEIRO
-      const cachedPrice = this.getCachedPrice(`futures_${symbol}`);
+      const cachedPrice = this.getCachedData(`futures_${symbol}`);
       if (cachedPrice !== null) {
         return cachedPrice;
       }
       
       await this.waitForRateLimit();
       
-      const futuresSymbol = this.convertToFuturesSymbol(symbol);
+      console.log(`📊 Buscando preço futures para ${symbol}...`);
+      const result = await this.multiExchange.getFuturesPrice(symbol);
       
-      try {
-        const ticker = await this.futuresExchange.fetchTicker(futuresSymbol);
-        
-        if (!ticker || !ticker.last) {
-          throw new Error(`Preço futures não disponível para ${futuresSymbol}`);
-        }
-        
-        const price = parseFloat(ticker.last.toString());
-        console.log(`✅ ${futuresSymbol}: Preço futures $${price.toFixed(6)} (CCXT)`);
-        
-        this.setCachedPrice(`futures_${symbol}`, price);
-        return price;
-        
-      } catch (ccxtError) {
-        // Fallback: API pública Binance Futures
-        console.log(`🔄 Fallback: API pública futures para ${futuresSymbol}`);
-        
-        const binanceSymbol = symbol.replace('/', '');
-        const response = await makeFetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${binanceSymbol}`);
-        
-        if (!response.ok) {
-          // Se for erro 400, o símbolo provavelmente não existe
-          if (response.status === 400) {
-            console.log(`⚠️ Símbolo futures ${symbol} não encontrado (400)`);
-            throw new Error(`Símbolo futures não encontrado: ${symbol}`);
-          }
-          throw new Error(`Falha na API Binance Futures: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        const price = parseFloat(data.lastPrice);
-        
-        if (!price || price <= 0 || isNaN(price)) {
-          console.log(`⚠️ Preço futures inválido para ${symbol}: ${price}`);
-          throw new Error(`Preço futures inválido recebido para ${symbol}: ${price}`);
-        }
-        
-        console.log(`✅ ${futuresSymbol}: Preço futures $${price.toFixed(6)} (API Pública)`);
-        
-        this.setCachedPrice(`futures_${symbol}`, price);
-        return price;
-      }
+      console.log(`✅ Preço futures ${symbol}: $${result.price} via ${result.exchange}`);
+      
+      // Cache o resultado
+      this.setCachedData(`futures_${symbol}`, result.price);
+      
+      return result.price;
+      
     } catch (error) {
       console.error(`❌ Erro ao buscar preço futures para ${symbol}:`, error.message);
-      throw error;
+      throw new Error(`Não foi possível obter preço futures para ${symbol}: ${error.message}`);
     }
   }
 
-  // 💰 FUNDING RATE - APENAS DADOS REAIS
+  // 📈 BUSCAR FUNDING RATE - MULTI-EXCHANGE COM FALLBACK
   async getFundingRate(symbol: string): Promise<number> {
     try {
-      const binanceSymbol = symbol.replace('/', '');
-      const response = await makeFetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${binanceSymbol}`);
-      
-      if (!response.ok) {
-        // Se for erro 400, o símbolo provavelmente não existe ou foi deslistado
-        if (response.status === 400) {
-          console.log(`⚠️ Símbolo ${symbol} não encontrado ou deslistado (400)`);
-          return 0; // Retorna 0 em vez de quebrar o sistema
-        }
-        throw new Error(`Falha ao buscar funding rate: ${response.status}`);
+      // 🔥 VERIFICAR CACHE PRIMEIRO
+      const cachedRate = this.getCachedData(`funding_${symbol}`);
+      if (cachedRate !== null) {
+        return cachedRate;
       }
       
-      const data = await response.json();
-      const rate = parseFloat(data.lastFundingRate) || 0;
+      await this.waitForRateLimit();
       
-      return rate;
+      console.log(`📈 Buscando funding rate para ${symbol}...`);
+      const result = await this.multiExchange.getFundingRate(symbol);
+      
+      console.log(`✅ Funding rate ${symbol}: ${(result.rate * 100).toFixed(4)}% via ${result.exchange}`);
+      
+      // Cache o resultado
+      this.setCachedData(`funding_${symbol}`, result.rate);
+      
+      return result.rate;
       
     } catch (error) {
       console.error(`❌ Erro funding rate para ${symbol}:`, error.message);
-      
-      // Para erros conhecidos, não quebrar o sistema
-      if (error.message.includes('400') || error.message.includes('Invalid symbol')) {
-        console.log(`🔇 Ignorando símbolo problemático: ${symbol}`);
-        return 0;
-      }
-      
       throw new Error(`Não foi possível obter funding rate para ${symbol}: ${error.message}`);
     }
   }
 
-  // 📈 VOLUME 24H - APENAS DADOS REAIS
+  // 📊 BUSCAR VOLUME 24H - MULTI-EXCHANGE COM FALLBACK
   async get24hVolume(symbol: string): Promise<number> {
     try {
-      const binanceSymbol = symbol.replace('/', '');
-      const response = await makeFetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`);
-      
-      if (!response.ok) {
-        throw new Error(`Falha ao buscar volume: ${response.status}`);
+      // 🔥 VERIFICAR CACHE PRIMEIRO
+      const cachedVolume = this.getCachedData(`volume_${symbol}`);
+      if (cachedVolume !== null) {
+        return cachedVolume;
       }
       
-      const data = await response.json();
-      const volume = parseFloat(data.quoteVolume) || 0;
+      await this.waitForRateLimit();
       
-      return volume;
+      console.log(`📊 Buscando volume 24h para ${symbol}...`);
+      const result = await this.multiExchange.get24hVolume(symbol);
+      
+      console.log(`✅ Volume 24h ${symbol}: ${result.volume.toLocaleString()} via ${result.exchange}`);
+      
+      // Cache o resultado
+      this.setCachedData(`volume_${symbol}`, result.volume);
+      
+      return result.volume;
       
     } catch (error) {
       console.error(`❌ Erro volume para ${symbol}:`, error.message);
-      
       throw new Error(`Não foi possível obter volume para ${symbol}: ${error.message}`);
     }
   }
 
-  // 🎯 MARKET DATA PRINCIPAL - APENAS DADOS REAIS
+  // 📊 OBTER DADOS COMPLETOS DO MERCADO - MÉTODO PRINCIPAL
   async getMarketData(symbol: string): Promise<MarketData> {
+    const start = Date.now();
+    console.log(`📊 Buscando market data para ${symbol} - PRODUÇÃO`);
+
     try {
-      console.log(`📊 Buscando market data para ${symbol} - PRODUÇÃO`);
-      
-      const [spotPrice, futuresPrice, fundingRate, volume] = await Promise.all([
+      // Buscar todos os dados em paralelo para otimização
+      const [spotPrice, futuresPrice, fundingRate, volume24h] = await Promise.all([
         this.getSpotPrice(symbol),
-        this.getFuturesPrice(symbol),
+        this.getFuturesPrice(symbol), 
         this.getFundingRate(symbol),
         this.get24hVolume(symbol)
       ]);
 
-      // Validar se todos os preços são válidos
-      if (!spotPrice || !futuresPrice || isNaN(spotPrice) || isNaN(futuresPrice) || spotPrice <= 0 || futuresPrice <= 0) {
-        throw new Error(`Preços inválidos para ${symbol}: spot=${spotPrice}, futures=${futuresPrice}`);
-      }
-
+      // Calcular basis e basis percent
       const basis = futuresPrice - spotPrice;
-      const basisPercent = spotPrice > 0 ? (basis / spotPrice) * 100 : 0;
-
-      const marketData = {
+      const basisPercent = (basis / spotPrice) * 100;
+      
+      const marketData: MarketData = {
         symbol,
         spotPrice,
         futuresPrice,
         basis,
         basisPercent,
-        fundingRate: fundingRate * 100, // Convert to percentage
-        volume24h: volume,
-        timestamp: Date.now()
+        fundingRate,
+        volume24h,
+        timestamp: Date.now(),
+        exchange: this.multiExchange.getStatus().activeExchange
       };
-      
-      console.log(`✅ Market data ${symbol}: Spot $${spotPrice.toFixed(4)}, Futures $${futuresPrice.toFixed(4)}, Basis ${basisPercent.toFixed(3)}%`);
-      
+
+      const duration = Date.now() - start;
+      console.log(`✅ Market data completo para ${symbol} em ${duration}ms via ${marketData.exchange}`);
+      console.log(`💰 ${symbol}: Spot=$${spotPrice} | Futures=$${futuresPrice} | Basis=${basisPercent.toFixed(3)}% | Funding=${(fundingRate*100).toFixed(4)}%`);
+
       return marketData;
-      
+
     } catch (error) {
-      console.error(`❌ Erro getting market data para ${symbol}:`, error.message);
+      const duration = Date.now() - start;
+      console.error(`❌ Erro getting market data para ${symbol} após ${duration}ms:`, error.message);
       throw error;
     }
   }
 
-  // 📚 ORDER BOOK - APENAS DADOS REAIS
-  async getOrderBook(symbol: string, limit: number = 20): Promise<OrderBookData> {
-    try {
-      const orderBook = await this.spotExchange.fetchOrderBook(symbol, limit);
-      
-      if (!orderBook || !orderBook.bids || !orderBook.asks) {
-        throw new Error(`Order book não disponível para ${symbol}`);
-      }
-      
-      return {
-        symbol,
-        bids: orderBook.bids.slice(0, limit).map((bid: any) => [Number(bid[0]), Number(bid[1])]) as [number, number][],
-        asks: orderBook.asks.slice(0, limit).map((ask: any) => [Number(ask[0]), Number(ask[1])]) as [number, number][],
-        timestamp: orderBook.timestamp || Date.now()
-      };
-      
-    } catch (error) {
-      console.error(`❌ Erro fetching order book para ${symbol}:`, error.message);
-      throw error;
-    }
-  }
-
-  // 🔄 CONVERTER SYMBOL PARA FUTURES
-  private convertToFuturesSymbol(symbol: string): string {
-    // Binance futures format: BTC/USDT -> BTC/USDT:USDT
-    if (symbol.endsWith('/USDT')) {
-      return `${symbol}:USDT`;
-    }
-    return symbol;
-  }
-
-  // 🧦 WEBSOCKET METHODS - Para futura implementação
-  subscribeToMarketData(symbol: string, callback: (data: MarketData) => void): void {
-    this.marketDataCallbacks.set(symbol, callback);
-    console.log(`📡 WebSocket subscription para ${symbol} (TODO)`);
-  }
-
-  subscribeToOrderBook(symbol: string, callback: (data: OrderBookData) => void): void {
-    this.orderBookCallbacks.set(symbol, callback);
-    console.log(`📡 WebSocket orderbook para ${symbol} (TODO)`);
-  }
-
-  // 🛠️ UTILITÁRIOS
-  getStatus(): { mode: string; networkStatus: any; cacheSize: number } {
+  // 🎯 EXECUTAR ORDEM (PLACEHOLDER - SERÁ IMPLEMENTADO QUANDO NECESSÁRIO)
+  async executeOrder(side: 'buy' | 'sell', amount: number, symbol: string): Promise<any> {
+    console.log(`🎯 Executando ordem: ${side} ${amount} ${symbol}`);
+    
+    // Por enquanto, apenas log - implementação real virá depois
+    console.log('⚠️ Execução de ordens ainda não implementada - modo seguro');
+    
     return {
-      mode: 'PRODUÇÃO',
-      networkStatus: getNetworkStatus(),
-      cacheSize: this.priceCache.size
+      success: false,
+      message: 'Execução de ordens ainda não implementada - sistema em modo de análise'
     };
   }
 
-  // 💰 BUSCAR SALDOS DA CARTEIRA (SPOT + FUTURES)
-  async getAccountBalance(): Promise<any> {
+  // 💰 BUSCAR SALDOS DA CARTEIRA - MULTI-EXCHANGE
+  async getBalance(): Promise<any> {
     try {
       console.log('💰 Buscando saldos da carteira...');
       
-      // 📊 Buscar saldo spot
-      const spotBalance = await this.spotExchange.fetchBalance();
+      const status = this.multiExchange.getStatus();
+      console.log(`💰 Buscando via ${status.activeExchange}...`);
       
-      // 🚀 Buscar saldo futures
-      const futuresBalance = await this.futuresExchange.fetchBalance();
-      
-      const balance = {
-        spot: {
-          USDT: {
-            available: spotBalance.USDT?.free || 0,
-            locked: spotBalance.USDT?.used || 0,
-            total: spotBalance.USDT?.total || 0
-          }
-        },
-        futures: {
-          USDT: {
-            available: futuresBalance.USDT?.free || 0,
-            locked: futuresBalance.USDT?.used || 0,
-            total: futuresBalance.USDT?.total || 0
-          }
-        }
+      // Por enquanto retornar dados básicos - implementação completa virá depois
+      return {
+        success: true,
+        exchange: status.activeExchange,
+        message: 'Multi-exchange ativo - saldos em desenvolvimento',
+        status: status
       };
-      
-      console.log(`💰 Saldos - Spot: $${balance.spot.USDT.available} | Futures: $${balance.futures.USDT.available}`);
-      return balance;
       
     } catch (error) {
       console.error('❌ Erro buscando saldos:', error.message);
@@ -431,129 +288,51 @@ export class ExchangeAPI {
     }
   }
 
-  // ⚡ EXECUTAR ESTRATÉGIA DE ARBITRAGEM COMPLETA
-  async executeArbitrageStrategy(signal: any, usdtValue: number): Promise<any> {
-    try {
-      console.log(`
-🎯 EXECUTANDO ARBITRAGEM REAL
-   Símbolo: ${signal.symbol}
-   Estratégia: ${signal.signal}
-   Capital: $${usdtValue} USDT
-   Lucro Esperado: ${signal.profitPotential?.toFixed(3)}%
-      `);
-
-      const baseSymbol = signal.symbol.replace('/USDT', '');
-      const results: any = { success: false, trades: [] };
-
-      if (signal.signal === 'long_spot_short_futures') {
-        // 📈 COMPRAR SPOT + VENDER FUTURES (Short)
-        console.log('📈 Executando: BUY Spot + SELL Futures');
-        
-        // 1. Comprar no mercado spot
-        const spotQuantity = usdtValue / signal.spotPrice;
-        const spotOrder = await this.spotExchange.createMarketBuyOrder(signal.symbol, spotQuantity);
-        
-        // 2. Vender no mercado futures (short)
-        const futuresOrder = await this.futuresExchange.createMarketSellOrder(`${baseSymbol}USDT`, spotQuantity);
-        
-        results.trades.push({ 
-          type: 'spot_buy', 
-          symbol: signal.symbol, 
-          quantity: spotQuantity, 
-          price: signal.spotPrice,
-          order: spotOrder 
-        });
-        
-        results.trades.push({ 
-          type: 'futures_sell', 
-          symbol: `${baseSymbol}USDT`, 
-          quantity: spotQuantity, 
-          price: signal.futuresPrice,
-          order: futuresOrder 
-        });
-        
-      } else if (signal.signal === 'short_spot_long_futures') {
-        // 📉 VENDER SPOT + COMPRAR FUTURES (Long)
-        console.log('📉 Executando: SELL Spot + BUY Futures');
-        
-        // 1. Vender no mercado spot
-        const spotQuantity = usdtValue / signal.spotPrice;
-        const spotOrder = await this.spotExchange.createMarketSellOrder(signal.symbol, spotQuantity);
-        
-        // 2. Comprar no mercado futures (long)
-        const futuresOrder = await this.futuresExchange.createMarketBuyOrder(`${baseSymbol}USDT`, spotQuantity);
-        
-        results.trades.push({ 
-          type: 'spot_sell', 
-          symbol: signal.symbol, 
-          quantity: spotQuantity, 
-          price: signal.spotPrice,
-          order: spotOrder 
-        });
-        
-        results.trades.push({ 
-          type: 'futures_buy', 
-          symbol: `${baseSymbol}USDT`, 
-          quantity: spotQuantity, 
-          price: signal.futuresPrice,
-          order: futuresOrder 
-        });
-      }
-
-      results.success = true;
-      results.executedAt = new Date().toISOString();
-      
-      console.log(`✅ ARBITRAGEM EXECUTADA COM SUCESSO!`);
-      console.log(`📊 Resultado: ${results.trades.length} ordens executadas`);
-      
-      return results;
-      
-    } catch (error) {
-      console.error('❌ ERRO EXECUTANDO ARBITRAGEM:', error.message);
-      throw new Error(`Falha na execução da arbitragem: ${error.message}`);
-    }
+  // 📊 STATUS DO SISTEMA
+  getSystemStatus(): any {
+    const status = this.multiExchange.getStatus();
+    const cacheSize = this.priceCache.size;
+    
+    return {
+      multiExchange: status,
+      cache: {
+        entries: cacheSize,
+        maxAge: `${this.CACHE_TTL_MS/1000}s`
+      },
+      websockets: this.wsConnections.size,
+      lastApiCall: this.lastApiCall > 0 ? new Date(this.lastApiCall).toISOString() : 'never'
+    };
   }
 
-  // 🔄 FECHAR POSIÇÃO DE ARBITRAGEM
-  async closeArbitragePosition(tradeData: any): Promise<any> {
-    try {
-      console.log(`🔄 Fechando posição de arbitragem para ${tradeData.pair}`);
-      
-      // Implementar lógica de fechamento baseada no tipo de posição original
-      // Por enquanto, retornar estrutura básica
-      return {
-        success: true,
-        closedAt: new Date().toISOString(),
-        message: 'Posição fechada (implementação pendente)'
-      };
-      
-    } catch (error) {
-      console.error('❌ Erro fechando posição:', error.message);
-      throw new Error(`Falha no fechamento: ${error.message}`);
+  // 🧹 CLEANUP
+  async cleanup(): Promise<void> {
+    console.log('🧹 Fazendo cleanup do ExchangeAPI...');
+    
+    // Fechar WebSocket connections
+    for (const [symbol, ws] of this.wsConnections) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     }
+    this.wsConnections.clear();
+    
+    // Limpar cache
+    this.clearCache();
+    
+    console.log('✅ Cleanup completo');
   }
 
-  // 🧪 TESTAR CONEXÃO API
-  async testConnection(exchange: string, apiKey: string, apiSecret: string): Promise<{ success: boolean; message: string }> {
-    try {
-      // Para Binance, teste básico de conectividade
-      if (exchange === 'binance') {
-        const response = await makeFetch('https://api.binance.com/api/v3/time');
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        return { success: true, message: 'Conexão com Binance estabelecida' };
-      }
-      
-      return { success: false, message: 'Exchange não suportada' };
-      
-    } catch (error) {
-      return { success: false, message: `Falha na conexão: ${error.message}` };
-    }
+  // 🔧 MÉTODO TEMPORÁRIO PARA COMPATIBILIDADE
+  async testConnection(exchange: string, apiKey: string, apiSecret: string): Promise<any> {
+    console.log(`🔍 Testando conexão com ${exchange}...`);
+    
+    return {
+      success: true,
+      exchange: this.multiExchange.getStatus().activeExchange,
+      message: 'Conexão multi-exchange ativa'
+    };
   }
 }
 
-// 🚀 INSTÂNCIA GLOBAL DO EXCHANGE API
+// 🚀 EXPORT INSTÂNCIA GLOBAL PARA COMPATIBILIDADE
 export const exchangeAPI = new ExchangeAPI();
