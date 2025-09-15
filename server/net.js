@@ -25,9 +25,19 @@ let PROXY_TEMPORARILY_DISABLED = false;
  * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  // 🚨 EMERGÊNCIA: FORÇA CONEXÃO DIRETA - HARDCODED NUNCA DIE!
-  console.log('🔥 EMERGÊNCIA ATIVA: FORÇANDO conexão DIRETA - NUNCA DIE!');
-  return undefined;
+  // 🌐 VPS FRANKFURT ATIVO - RESOLVENDO BLOQUEIO GEOGRÁFICO!
+  const FRANKFURT_VPS_HOST = '165.227.168.225';
+  const FRANKFURT_VPS_PORT = '1080';
+  
+  console.log(`🌐 Usando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`);
+  
+  try {
+    const socksProxy = `socks5h://${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`;
+    return new SocksProxyAgent(socksProxy);
+  } catch (error) {
+    console.error('❌ Erro configurando VPS Frankfurt, usando conexão direta:', error.message);
+    return undefined;
+  }
   
   const now = Date.now();
   
