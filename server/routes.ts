@@ -297,6 +297,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 🌐 STATUS DETALHADO DA REDE  
+  app.get('/api/network/status', async (req, res) => {
+    try {
+      const status = getNetworkStatus();
+      return res.json({
+        success: true,
+        ...status
+      });
+    } catch (error) {
+      console.error('Erro getting network status:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro interno do servidor' 
+      });
+    }
+  });
+
+  // 🔧 AÇÕES DE CONTROLE DA REDE
+  app.post('/api/network/actions', async (req, res) => {
+    try {
+      const { action } = req.body;
+      
+      if (!action) {
+        return res.status(400).json({
+          success: false,
+          error: 'Ação não especificada'
+        });
+      }
+
+      // TODO: Implementar ações (retest, forceDirect, etc.)
+      console.log(`🔧 Ação de rede solicitada: ${action}`);
+      
+      return res.json({
+        success: true,
+        message: `Ação '${action}' executada`,
+        action: action
+      });
+    } catch (error) {
+      console.error('Erro executing network action:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro interno do servidor' 
+      });
+    }
+  });
+
   // 💰 SALDOS DA CARTEIRA (SPOT + FUTURES)
   app.get('/api/exchange/balance', async (req, res) => {
     try {

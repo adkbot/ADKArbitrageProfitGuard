@@ -3,20 +3,25 @@
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import ccxt from 'ccxt';
-import { http } from './http-client.js';
+import axios from 'axios';
 
 // 🔧 CONFIGURAÇÃO SIMPLES - PROXY_URL ou SOCKS5 opcional
 const { PROXY_URL, PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT, BINANCE_API_KEY, BINANCE_SECRET_KEY } = process.env;
 
-// 🛡️ SISTEMA ANTI-FALHAS - Auto-disable proxy após falhas
-let consecutiveProxyFailures = 0;
-let proxyDisabledAt = 0;
-const MAX_FAILURES_BEFORE_DISABLE = 5;
-const PROXY_DISABLE_DURATION = 60 * 1000; // 1 minuto
-const AUTO_RECOVERY_CHECK = 2 * 60 * 1000; // 2 minutos
+// 🔧 CONFIGURAÇÃO INTELIGENTE
+const BACKOFF_INTERVALS = [15, 60, 300, 600]; // 15s, 1m, 5m, 10m (em segundos)
+const GEO_BLOCK_TTL = 6 * 60 * 60 * 1000; // 6 horas
 
-// 🔧 CONTROLE GLOBAL - Desabilita proxy temporariamente
-let PROXY_TEMPORARILY_DISABLED = false;
+// 🧠 SISTEMA INTELIGENTE DE PROXY - Estado Centralizado
+let proxyState = {
+  mode: 'testing', // 'direct', 'testing', 'enabled', 'backoff'
+  failures: 0,
+  nextRetryAt: 0,
+  lastSuccessAt: 0,
+  lastError: null,
+  geoBlocked: false,
+  geoBlockedUntil: 0
+};
 
 /**
  * 🚀 CRIA AGENTE PROXY (SOCKS5 ou HTTP)
@@ -25,93 +30,125 @@ let PROXY_TEMPORARILY_DISABLED = false;
  * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  // 🌐 SISTEMA INTELIGENTE DE PROXY - FRANKFURT VPS + FALLBACKS
-  
-  // ✅ TESTE CONFIRMOU: RESTRIÇÕES GEOGRÁFICAS EXISTEM!
-  // 🌐 REATIVANDO VPS FRANKFURT PARA CONTORNAR BLOQUEIO HTTP 451
-  const FRANKFURT_VPS_HOST = '165.227.168.225';
-  const FRANKFURT_VPS_PORT = '1080';
-  
-  console.log(`🌐 Net: Usando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT} (confirmado necessário)`);
-  
-  try {
-    const socksProxy = `socks5h://${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`;
-    return new SocksProxyAgent(socksProxy);
-  } catch (error) {
-    console.log('⚠️ Net: VPS Frankfurt indisponível, usando fallback...');
-  }
-
-  // 🌐 OPÇÃO 2: VARIÁVEIS DE AMBIENTE (FALLBACK)
-  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
-  
   const now = Date.now();
   
-  // 🚨 SISTEMA SUPER-SIMPLES: Se proxy temporariamente desabilitado, usar conexão direta
-  if (PROXY_TEMPORARILY_DISABLED) {
-    // ✅ AUTO-RECOVERY: Testa reabilitação após tempo configurado
-    if (proxyDisabledAt > 0 && (now - proxyDisabledAt) > AUTO_RECOVERY_CHECK) {
-      console.log('🔄 Tentando reabilitar proxy após período de recuperação...');
-      PROXY_TEMPORARILY_DISABLED = false;
-      consecutiveProxyFailures = 0;
-      proxyDisabledAt = 0;
-    } else {
-      const timeLeft = Math.ceil((AUTO_RECOVERY_CHECK - (now - proxyDisabledAt)) / 1000);
-      console.log(`🚫 Proxy temporariamente DESABILITADO (${timeLeft}s restantes) - usando conexão DIRETA`);
+  // 🧠 VERIFICAÇÃO INTELIGENTE DE ESTADO
+  updateProxyState(now);
+  
+  // 🚫 SE BACKOFF ATIVO, USA CONEXÃO DIRETA
+  if (proxyState.mode === 'backoff' && now < proxyState.nextRetryAt) {
+    const timeLeft = Math.ceil((proxyState.nextRetryAt - now) / 1000);
+    if (proxyState.failures === 1) { // Log apenas uma vez por período
+      console.log(`🔄 Proxy em backoff - próxima tentativa em ${timeLeft}s`);
+    }
+    return undefined;
+  }
+  
+  // 🌐 SE MODO DIRETO OU GEO-BLOQUEIO EXPIRADO, USA CONEXÃO DIRETA  
+  if (proxyState.mode === 'direct' || (proxyState.geoBlocked && now > proxyState.geoBlockedUntil)) {
+    return undefined;
+  }
+  
+  // 🔧 CONFIGURAÇÃO DINÂMICA DE PROXY (VARIÁVEIS DE AMBIENTE APENAS)
+  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
+  
+  // 🌐 TENTA SOCKS5 PRIMEIRO (SE CONFIGURADO)
+  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
+    try {
+      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
+      if (proxyState.failures === 0) { // Log apenas na primeira tentativa
+        console.log(`🔧 Net: Usando SOCKS5: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
+      }
+      return new SocksProxyAgent(socksProxy);
+    } catch (error) {
+      recordProxyFailure('SOCKS5 creation error: ' + error.message);
       return undefined;
     }
   }
   
-  // 🚀 PROXY ATIVO - Tenta SOCKS5 primeiro
-  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
-    try {
-      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
-      console.log(`🔧 Net: Criando SOCKS5 proxy agent: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
-      return new SocksProxyAgent(socksProxy);
-    } catch (error) {
-      console.error('❌ Net: Erro criando SOCKS5 proxy agent:', error.message);
-      handleProxyFailure();
-    }
-  }
-  
-  // Fallback para HTTP proxy
+  // 🌐 TENTA HTTP PROXY (SE CONFIGURADO)
   if (PROXY_URL && PROXY_URL.trim() !== '') {
     try {
-      console.log('🔧 Net: Criando HTTP proxy agent para:', redactUrl(PROXY_URL));
+      if (proxyState.failures === 0) { // Log apenas na primeira tentativa
+        console.log('🔧 Net: Usando HTTP proxy:', redactUrl(PROXY_URL));
+      }
       return new HttpsProxyAgent(PROXY_URL);
     } catch (error) {
-      console.error('❌ Net: Erro criando HTTP proxy agent:', error.message);
-      handleProxyFailure();
+      recordProxyFailure('HTTP proxy creation error: ' + error.message);
+      return undefined;
     }
   }
   
-  console.log('🌐 Net: Usando conexão DIRETA (sem proxy configurado)');
+  // 🌐 SEM PROXY CONFIGURADO - CONEXÃO DIRETA
+  if (proxyState.mode !== 'direct') {
+    proxyState.mode = 'direct';
+    console.log('🌐 Net: Conexão DIRETA (nenhum proxy configurado)');
+  }
   return undefined;
 }
 
 /**
- * 🚨 SISTEMA ANTI-FALHAS SIMPLES - Desabilita proxy automaticamente
+ * 🧠 ATUALIZA ESTADO INTELIGENTE DO PROXY
  */
-function handleProxyFailure() {
-  consecutiveProxyFailures++;
-  console.log(`⚠️ Falha de proxy detectada (#${consecutiveProxyFailures}/${MAX_FAILURES_BEFORE_DISABLE})`);
-  
-  if (consecutiveProxyFailures >= MAX_FAILURES_BEFORE_DISABLE) {
-    PROXY_TEMPORARILY_DISABLED = true;
-    proxyDisabledAt = Date.now();
-    console.log(`🚨 PROXY AUTO-DESABILITADO após ${MAX_FAILURES_BEFORE_DISABLE} falhas consecutivas!`);
-    console.log(`🔄 Reconexão automática em ${AUTO_RECOVERY_CHECK / 1000}s usando conexão DIRETA`);
+function updateProxyState(now) {
+  // ✅ EXPIRA GEO-BLOQUEIO SE NECESSÁRIO
+  if (proxyState.geoBlocked && now > proxyState.geoBlockedUntil) {
+    proxyState.geoBlocked = false;
+    proxyState.mode = 'testing';
+    console.log('🌍 Geo-bloqueio expirado - testando conexão direta');
   }
 }
 
 /**
- * 🎯 SUCESSO DE PROXY - Reseta contador de falhas  
+ * 🚨 REGISTRA FALHA DE PROXY COM BACKOFF EXPONENCIAL
  */
-function handleProxySuccess() {
-  if (consecutiveProxyFailures > 0 || PROXY_TEMPORARILY_DISABLED) {
-    console.log('✅ Proxy funcionando - resetando sistema anti-falhas');
-    consecutiveProxyFailures = 0;
-    PROXY_TEMPORARILY_DISABLED = false;
-    proxyDisabledAt = 0;
+function recordProxyFailure(errorMessage) {
+  const now = Date.now();
+  proxyState.failures++;
+  proxyState.lastError = errorMessage;
+  
+  // 📊 LOG LIMITADO - Apenas falhas significativas
+  if (proxyState.failures === 1 || proxyState.failures % 10 === 0) {
+    console.log(`⚠️ Proxy falha #${proxyState.failures}: ${errorMessage}`);
+  }
+  
+  // 🔄 BACKOFF EXPONENCIAL
+  const backoffIndex = Math.min(proxyState.failures - 1, BACKOFF_INTERVALS.length - 1);
+  const backoffSeconds = BACKOFF_INTERVALS[backoffIndex];
+  const jitter = Math.random() * 0.3 + 0.85; // 85-115% do tempo base
+  
+  proxyState.nextRetryAt = now + (backoffSeconds * 1000 * jitter);
+  proxyState.mode = 'backoff';
+  
+  if (proxyState.failures === 1) {
+    console.log(`🔄 Proxy desabilitado - próxima tentativa em ${backoffSeconds}s`);
+  }
+}
+
+/**
+ * 🎯 SUCESSO DE PROXY - Reseta estado de falhas
+ */
+function recordProxySuccess() {
+  if (proxyState.failures > 0) {
+    console.log(`✅ Proxy funcionando - resetando ${proxyState.failures} falhas`);
+    proxyState.failures = 0;
+    proxyState.mode = 'enabled';
+    proxyState.lastSuccessAt = Date.now();
+    proxyState.nextRetryAt = 0;
+    proxyState.lastError = null;
+  }
+}
+
+/**
+ * 🌍 DETECTA GEO-BLOQUEIO (HTTP 451/403)
+ */
+export function setGeoBlocked() {
+  const now = Date.now();
+  if (!proxyState.geoBlocked) {
+    proxyState.geoBlocked = true;
+    proxyState.geoBlockedUntil = now + GEO_BLOCK_TTL;
+    proxyState.mode = 'testing';
+    console.log('🚨 Geo-bloqueio detectado - ativando proxy por 6h');
   }
 }
 
@@ -194,11 +231,11 @@ export async function makeFetch(url, options = {}) {
   };
   
   try {
-    const response = await http(axiosConfig);
+    const response = await axios(axiosConfig);
     
     // ✅ REGISTRA SUCESSO DE PROXY
     if (agent) {
-      handleProxySuccess();
+      recordProxySuccess();
     }
     
     return {
@@ -217,8 +254,7 @@ export async function makeFetch(url, options = {}) {
                              error.message?.includes('connect ECONNREFUSED');
     
     if (agent && isConnectionError) {
-      console.log('🚨 ERRO DETECTADO: Falha de conectividade do proxy');
-      handleProxyFailure();
+      recordProxyFailure(error.message);
     }
     
     console.error(`❌ Net: Fetch error for ${redactUrl(url)}:`, error.message);
@@ -241,13 +277,16 @@ function redactUrl(url) {
 }
 
 /**
- * 📊 STATUS DO SISTEMA DE REDE
+ * 📊 STATUS COMPLETO DO SISTEMA DE REDE
  */
 export function getNetworkStatus() {
+  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT, PROXY_URL } = process.env;
   const socks5Enabled = !!(PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT);
   const httpProxyEnabled = !!(PROXY_URL && PROXY_URL.trim() !== '');
+  const now = Date.now();
   
   return {
+    mode: proxyState.mode,
     proxyEnabled: socks5Enabled || httpProxyEnabled,
     proxyType: socks5Enabled ? 'SOCKS5' : httpProxyEnabled ? 'HTTP' : 'NONE',
     proxyUrl: socks5Enabled 
@@ -255,6 +294,12 @@ export function getNetworkStatus() {
       : httpProxyEnabled 
         ? redactUrl(PROXY_URL) 
         : null,
+    failures: proxyState.failures,
+    nextRetrySeconds: proxyState.nextRetryAt > now ? Math.ceil((proxyState.nextRetryAt - now) / 1000) : 0,
+    geoBlocked: proxyState.geoBlocked,
+    geoBlockedUntil: proxyState.geoBlockedUntil,
+    lastSuccessAt: proxyState.lastSuccessAt,
+    lastError: proxyState.lastError,
     hasApiKey: !!BINANCE_API_KEY,
     hasSecret: !!BINANCE_SECRET_KEY,
   };
