@@ -403,10 +403,36 @@ export class MultiExchangeManager {
   async getFundingRate(symbol: string): Promise<{ rate: number; exchange: string }> {
     let lastError;
     
-    // Tentar exchange ativa primeiro
+    // 🔧 TRATAMENTO ESPECÍFICO PARA OKX - normalizar símbolo para swap
+    if (this.activeExchange === 'okx') {
+      try {
+        const exchange = this.futuresExchanges['okx'];
+        if (exchange) {
+          // ✅ Carregar markets e normalizar símbolo para swap format
+          await exchange.loadMarkets();
+          
+          // Converter ALGO/USDT → ALGO/USDT:USDT para funding rates
+          const swapSymbol = symbol.includes(':') ? symbol : `${symbol}:USDT`;
+          
+          console.log(`🔧 OKX funding rate: ${symbol} → ${swapSymbol}`);
+          
+          const fundingRate = await exchange.fetchFundingRate(swapSymbol);
+          
+          return {
+            rate: fundingRate.fundingRate || 0,
+            exchange: 'OKX'
+          };
+        }
+      } catch (error) {
+        lastError = error;
+        console.log(`⚠️ Erro funding rate na OKX: ${error.message}`);
+      }
+    }
+    
+    // Tentar exchange ativa padrão
     try {
       const exchange = this.futuresExchanges[this.activeExchange];
-      if (exchange) {
+      if (exchange && this.activeExchange !== 'okx') {
         const fundingRate = await exchange.fetchFundingRate(symbol);
         return {
           rate: fundingRate.fundingRate || 0,
@@ -418,23 +444,47 @@ export class MultiExchangeManager {
       console.log(`⚠️ Erro funding rate na ${EXCHANGES[this.activeExchange].name}: ${error.message}`);
     }
     
-    // Fallback automático
-    for (const [exchangeId, health] of Object.entries(this.exchangeHealth)) {
-      if (exchangeId === this.activeExchange || !health.available) continue;
+    // 🎯 FALLBACK INTELIGENTE - apenas exchanges SEM geo-bloqueio
+    const viableExchanges = ['okx', 'coinbase']; // Exchanges que funcionam sem proxy
+    
+    for (const exchangeId of viableExchanges) {
+      if (exchangeId === this.activeExchange) continue;
+      
+      const health = this.exchangeHealth[exchangeId];
+      if (!health || !health.available || health.errorCount >= 5) continue;
       
       try {
         const exchange = this.futuresExchanges[exchangeId];
         if (exchange) {
           console.log(`🔄 Tentando fallback funding rate: ${EXCHANGES[exchangeId].name}`);
-          const fundingRate = await exchange.fetchFundingRate(symbol);
           
-          this.activeExchange = exchangeId;
-          console.log(`✅ Fallback funding rate bem-sucedido: ${EXCHANGES[exchangeId].name}`);
-          
-          return {
-            rate: fundingRate.fundingRate || 0,
-            exchange: EXCHANGES[exchangeId].name
-          };
+          // 🔧 Tratamento específico OKX
+          if (exchangeId === 'okx') {
+            await exchange.loadMarkets();
+            const swapSymbol = symbol.includes(':') ? symbol : `${symbol}:USDT`;
+            
+            console.log(`🔧 OKX fallback funding rate: ${symbol} → ${swapSymbol}`);
+            
+            const fundingRate = await exchange.fetchFundingRate(swapSymbol);
+            
+            this.activeExchange = exchangeId;
+            console.log(`✅ Fallback funding rate bem-sucedido: OKX`);
+            
+            return {
+              rate: fundingRate.fundingRate || 0,
+              exchange: 'OKX'
+            };
+          } else {
+            const fundingRate = await exchange.fetchFundingRate(symbol);
+            
+            this.activeExchange = exchangeId;
+            console.log(`✅ Fallback funding rate bem-sucedido: ${EXCHANGES[exchangeId].name}`);
+            
+            return {
+              rate: fundingRate.fundingRate || 0,
+              exchange: EXCHANGES[exchangeId].name
+            };
+          }
         }
       } catch (error) {
         console.log(`❌ Fallback funding rate falhou: ${EXCHANGES[exchangeId].name}: ${error.message}`);
