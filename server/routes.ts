@@ -7,6 +7,7 @@ import { AnalysisEngine } from "./analysis-engine.js";
 import publicApiRoutes from './public-api.js';
 import { UserManager } from './user-manager.js';
 import { AuthManager } from './auth.js';
+import { getNetworkStatus } from './net.js';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint
@@ -297,13 +298,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🌐 STATUS DETALHADO DA REDE  
+  // 🌐 STATUS DETALHADO DA REDE (usa sistema proxy existente)
   app.get('/api/network/status', async (req, res) => {
     try {
-      const status = getNetworkStatus();
+      const { getProxyStatus } = await import('./proxy');
+      const proxyStatus = getProxyStatus();
+      const networkStatus = getNetworkStatus();
+      
       return res.json({
         success: true,
-        ...status
+        proxyMode: proxyStatus.enabled ? 'enabled' : 'direct',
+        connectionStatus: proxyStatus.enabled ? 'proxy' : 'direct',
+        lastSuccess: networkStatus.lastSuccess,
+        geoBlocked: networkStatus.geoBlocked,
+        fallbackActive: networkStatus.fallbackActive,
+        proxyUrl: proxyStatus.url || 'none',
+        fallbacks: proxyStatus.fallbacks || 0,
+        timestamp: new Date().toISOString()
       });
     } catch (error) {
       console.error('Erro getting network status:', error);
@@ -314,7 +325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔧 AÇÕES DE CONTROLE DA REDE
+  // 🔧 AÇÕES DE CONTROLE DA REDE (integra com sistema proxy)
   app.post('/api/network/actions', async (req, res) => {
     try {
       const { action } = req.body;
@@ -326,19 +337,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // TODO: Implementar ações (retest, forceDirect, etc.)
-      console.log(`🔧 Ação de rede solicitada: ${action}`);
+      let result = { success: false, message: '' };
+
+      switch (action) {
+        case 'test':
+          const { testProxyConnectivity } = await import('./proxy');
+          const testResult = await testProxyConnectivity();
+          result = {
+            success: testResult.binance && testResult.binanceFutures,
+            message: 'Teste de conectividade executado',
+            data: testResult
+          };
+          break;
+          
+        case 'switch':
+          const { switchToNextProxy } = await import('./proxy');
+          const switched = await switchToNextProxy();
+          result = {
+            success: switched,
+            message: switched ? 'Proxy alternado com sucesso' : 'Falha ao alternar proxy'
+          };
+          break;
+          
+        case 'reset':
+          const { resetProxy } = await import('./proxy');
+          resetProxy();
+          result = {
+            success: true,
+            message: 'Sistema de proxy resetado'
+          };
+          break;
+          
+        default:
+          return res.status(400).json({
+            success: false,
+            error: `Ação '${action}' não suportada. Use: test, switch, reset`
+          });
+      }
       
-      return res.json({
-        success: true,
-        message: `Ação '${action}' executada`,
-        action: action
-      });
+      console.log(`🔧 Ação de rede '${action}' executada:`, result);
+      return res.json(result);
+      
     } catch (error) {
       console.error('Erro executing network action:', error);
       return res.status(500).json({ 
         success: false, 
         error: 'Erro interno do servidor' 
+      });
+    }
+  });
+
+  // 🔍 STATUS DETALHADO DO MOTOR DE ANÁLISE
+  app.get('/api/engine/status', async (req, res) => {
+    try {
+      const engineStatus = analysisEngine.getStatus();
+      const networkStatus = getNetworkStatus();
+      
+      const status = {
+        success: true,
+        engine: {
+          isActive: engineStatus.isRunning,
+          lastAnalysis: engineStatus.lastAnalysis,
+          symbolsMonitored: engineStatus.symbolsMonitored,
+          priceHistorySize: engineStatus.priceHistorySize,
+          health: engineStatus.isRunning ? 'healthy' : 'stopped'
+        },
+        network: {
+          proxyMode: networkStatus.proxyMode,
+          connectionStatus: networkStatus.connectionStatus,
+          lastSuccessfulConnection: networkStatus.lastSuccess,
+          geoBlocked: networkStatus.geoBlocked,
+          fallbacksActive: networkStatus.fallbackActive
+        },
+        performance: {
+          activeOpportunities: opportunities.length || 0,
+          averageResponseTime: networkStatus.avgResponseTime || 'N/A',
+          successRate: networkStatus.successRate || 'N/A'
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      return res.json(status);
+    } catch (error) {
+      console.error('Erro getting engine status:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro interno do servidor',
+        timestamp: new Date().toISOString()
       });
     }
   });
