@@ -52,37 +52,21 @@ const createHttpClient = () => {
     return axios.create(config);
   }
 
-  // 🌐 OPÇÃO 1: VPS FRANKFURT DIRETO (PRIORITÁRIO)
+  // ✅ TESTE CONFIRMOU: RESTRIÇÕES GEOGRÁFICAS EXISTEM!
+  // 🌐 REATIVANDO VPS FRANKFURT PARA CONTORNAR BLOQUEIO HTTP 451
   const FRANKFURT_VPS_HOST = '165.227.168.225';
   const FRANKFURT_VPS_PORT = '1080';
   
-  console.log(`🌐 Tentando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`);
+  console.log(`🌐 Usando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT} (confirmado necessário por HTTP 451)`);
   
   try {
     const socksProxy = `socks5h://${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`;
     config.httpsAgent = new SocksProxyAgent(socksProxy);
     config.httpAgent = new SocksProxyAgent(socksProxy);
-    console.log('✅ VPS Frankfurt configurado - resolvendo bloqueio geográfico!');
+    console.log('✅ VPS Frankfurt ativo - contornando restrições geográficas!');
     return axios.create(config);
   } catch (error) {
-    console.log('⚠️ VPS Frankfurt indisponível, tentando variáveis de ambiente...');
-  }
-
-  // 🌐 OPÇÃO 2: USAR VARIÁVEIS DE AMBIENTE (FALLBACK)
-  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
-  
-  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
-    try {
-      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
-      console.log(`🔧 Usando SOCKS5 das variáveis: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
-      config.httpsAgent = new SocksProxyAgent(socksProxy);
-      config.httpAgent = new SocksProxyAgent(socksProxy);
-      console.log('✅ Proxy SOCKS5 configurado com sucesso');
-      return axios.create(config);
-    } catch (error) {
-      console.error('❌ Erro configurando SOCKS5 das variáveis:', (error as Error).message);
-      recordHttpProxyFailure();
-    }
+    console.log('⚠️ VPS Frankfurt indisponível, usando fallback...');
   }
 
   // 🌐 OPÇÃO 3: CONEXÃO DIRETA (ÚLTIMO FALLBACK)
