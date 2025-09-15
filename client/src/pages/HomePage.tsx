@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import BotControlButtons from '@/components/BotControlButtons';
 import StatusIndicator from '@/components/StatusIndicator';
@@ -8,6 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { DollarSign, Percent, Clock, Activity, TrendingUp, BarChart3, RefreshCw, Zap, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';
@@ -16,6 +17,8 @@ type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';
 export default function HomePage() {
   const [botStatus, setBotStatus] = useState<BotStatus>('IDLE');
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [lastNotifiedAttemptId, setLastNotifiedAttemptId] = useState<string | null>(null);
+  const { toast } = useToast();
   
   // 📊 BUSCAR OPORTUNIDADES DE ARBITRAGEM REAIS (Atualização a cada 5 segundos)
   const { data: opportunities = [], isLoading: loadingOpportunities, refetch: refetchOpportunities } = useQuery({
@@ -56,6 +59,44 @@ export default function HomePage() {
   const tradesArray = Array.isArray(trades) ? trades : [];
   const botDataTyped = botData as { activeTrades?: number; todayTrades?: number; pairs?: string[] } || {};
   const executionAttempts = (executionData as any)?.attempts || [];
+
+  // 🔔 SISTEMA INTELIGENTE DE NOTIFICAÇÕES
+  useEffect(() => {
+    if (executionAttempts.length > 0) {
+      const latestAttempt = executionAttempts[0]; // Mais recente primeiro
+      
+      // Se é uma nova tentativa que não foi notificada
+      if (latestAttempt.id && latestAttempt.id !== lastNotifiedAttemptId) {
+        const { status, symbol, spotPrice, futuresPrice, profit, reason } = latestAttempt;
+        
+        if (status === 'completed' && profit > 0) {
+          // 🎉 SUCESSO - Notificação verde
+          toast({
+            title: "✅ Trade Executado!",
+            description: `${symbol}: Lucro de $${profit.toFixed(2)} (${((spotPrice - futuresPrice) / spotPrice * 100).toFixed(3)}%)`,
+            variant: "default",
+          });
+        } else if (status === 'failed' && reason) {
+          // ⚠️ FALHA - Notificação informativa
+          const shortReason = reason.length > 50 ? reason.substring(0, 50) + "..." : reason;
+          toast({
+            title: "⚠️ Execução Falhou",
+            description: `${symbol}: ${shortReason}`,
+            variant: "destructive",
+          });
+        } else if (status === 'executing') {
+          // 🔄 EXECUTANDO - Notificação azul
+          toast({
+            title: "🔄 Executando Trade",
+            description: `${symbol}: Basis ${((spotPrice - futuresPrice) / spotPrice * 100).toFixed(3)}%`,
+            variant: "default",
+          });
+        }
+        
+        setLastNotifiedAttemptId(latestAttempt.id);
+      }
+    }
+  }, [executionAttempts, lastNotifiedAttemptId, toast]);
   
   // 💰 PROCESSAMENTO DE DADOS DE SALDO REAIS
   const balanceDataTyped = balanceData as any || {};
@@ -436,6 +477,89 @@ export default function HomePage() {
               lastUpdate={new Date().toLocaleTimeString('pt-BR')}
             />
           </div>
+        </section>
+        
+        {/* 📊 PAINEL DE TENTATIVAS RECENTES DE EXECUÇÃO */}
+        <section>
+          <h2 className="text-lg font-semibold mb-4">Execuções em Tempo Real</h2>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Tentativas Recentes
+                <Badge variant="secondary" data-testid="badge-total-attempts">
+                  {executionAttempts.length}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {executionAttempts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Nenhuma execução recente</p>
+                  <p className="text-sm">As tentativas aparecerão aqui quando o bot detectar oportunidades</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-80 overflow-y-auto">
+                  {executionAttempts.slice(0, 10).map((attempt: any, index: number) => (
+                    <div 
+                      key={attempt.id || index}
+                      className="flex items-center justify-between p-3 border rounded-lg bg-card/50"
+                      data-testid={`execution-attempt-${index}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          {attempt.status === 'completed' ? (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          ) : attempt.status === 'failed' ? (
+                            <AlertCircle className="h-4 w-4 text-red-500" />
+                          ) : (
+                            <Loader className="h-4 w-4 text-blue-500 animate-spin" />
+                          )}
+                          <span className="font-medium" data-testid={`symbol-${index}`}>
+                            {attempt.symbol}
+                          </span>
+                        </div>
+                        <Badge 
+                          variant={
+                            attempt.status === 'completed' ? 'default' : 
+                            attempt.status === 'failed' ? 'destructive' : 
+                            'secondary'
+                          }
+                          data-testid={`status-${index}`}
+                        >
+                          {attempt.status === 'completed' ? 'Sucesso' : 
+                           attempt.status === 'failed' ? 'Falhou' : 
+                           'Executando'}
+                        </Badge>
+                      </div>
+                      
+                      <div className="text-right">
+                        {attempt.status === 'completed' && attempt.profit > 0 && (
+                          <div className="text-green-600 font-medium" data-testid={`profit-${index}`}>
+                            +${attempt.profit.toFixed(2)}
+                          </div>
+                        )}
+                        {attempt.spotPrice && attempt.futuresPrice && (
+                          <div className="text-sm text-muted-foreground" data-testid={`basis-${index}`}>
+                            {((attempt.spotPrice - attempt.futuresPrice) / attempt.spotPrice * 100).toFixed(3)}%
+                          </div>
+                        )}
+                        {attempt.reason && attempt.status === 'failed' && (
+                          <div className="text-xs text-red-600 max-w-40 truncate" data-testid={`reason-${index}`}>
+                            {attempt.reason}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(attempt.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </section>
         
         {/* Histórico de Trades Reais */}
