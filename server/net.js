@@ -30,41 +30,9 @@ let proxyState = {
  * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  const now = Date.now();
-  
-  // 🧠 VERIFICAÇÃO INTELIGENTE DE ESTADO
-  updateProxyState(now);
-  
-  // 🚫 SE BACKOFF ATIVO, USA CONEXÃO DIRETA
-  if (proxyState.mode === 'backoff' && now < proxyState.nextRetryAt) {
-    const timeLeft = Math.ceil((proxyState.nextRetryAt - now) / 1000);
-    if (proxyState.failures === 1) { // Log apenas uma vez por período
-      console.log(`🔄 Proxy em backoff - próxima tentativa em ${timeLeft}s`);
-    }
-    return undefined;
-  }
-  
-  // 🌐 SE MODO DIRETO (sem geo-bloqueio), USA CONEXÃO DIRETA  
-  if (proxyState.mode === 'direct' && !proxyState.geoBlocked) {
-    return undefined;
-  }
-  
-  // 🔧 CONFIGURAÇÃO DINÂMICA DE PROXY (VARIÁVEIS DE AMBIENTE APENAS)
-  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
-  
-  // 🌐 TENTA SOCKS5 PRIMEIRO (SE CONFIGURADO)
-  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
-    try {
-      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
-      if (proxyState.failures === 0) { // Log apenas na primeira tentativa
-        console.log(`🔧 Net: Usando SOCKS5: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
-      }
-      return new SocksProxyAgent(socksProxy);
-    } catch (error) {
-      recordProxyFailure('SOCKS5 creation error: ' + error.message);
-      return undefined;
-    }
-  }
+  // 🎯 TESTE: CONEXÃO DIRETA PARA BYPASS (REPLIT PODE RESOLVER GEO-BLOQUEIO AUTOMATICAMENTE)
+  console.log(`🔓 Net: TESTE DIRETO - Sem proxy, testando Replit geo-bypass`);
+  return undefined;
   
   // 🌐 TENTA HTTP PROXY (SE CONFIGURADO)
   if (PROXY_URL && PROXY_URL.trim() !== '') {
