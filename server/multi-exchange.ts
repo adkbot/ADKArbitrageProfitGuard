@@ -576,4 +576,30 @@ export class MultiExchangeManager {
       throw error;
     }
   }
+
+  /**
+   * 🔑 OBTER INSTÂNCIA DE EXCHANGE PARA OPERAÇÕES COM CREDENCIAIS REAIS
+   */
+  getExchangeInstance(exchangeName: string): any {
+    console.log(`🔍 Buscando instância para exchange: ${exchangeName}`);
+    
+    // Normalizar nome da exchange (minúsculo)
+    const normalizedName = exchangeName.toLowerCase();
+    
+    // Verificar se a exchange existe
+    if (!EXCHANGES[normalizedName]) {
+      console.log(`❌ Exchange ${exchangeName} não suportada`);
+      return null;
+    }
+
+    // Retornar a instância spot da exchange
+    const instance = this.spotExchanges[normalizedName];
+    if (instance) {
+      console.log(`✅ Instância ${exchangeName} encontrada`);
+      return instance;
+    } else {
+      console.log(`⚠️ Instância ${exchangeName} não inicializada`);
+      return null;
+    }
+  }
 }
