@@ -30,27 +30,40 @@ let proxyState = {
  * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  // 🎯 TESTE: CONEXÃO DIRETA PARA BYPASS (REPLIT PODE RESOLVER GEO-BLOQUEIO AUTOMATICAMENTE)
-  console.log(`🔓 Net: TESTE DIRETO - Sem proxy, testando Replit geo-bypass`);
-  return undefined;
+  console.log(`🔍 Net: makeAgent() chamado`);
+  console.log(`🔍 Net: PROXY_SOCKS5_HOST = ${PROXY_SOCKS5_HOST ? 'SET' : 'NOT SET'}`);
+  console.log(`🔍 Net: PROXY_SOCKS5_PORT = ${PROXY_SOCKS5_PORT ? 'SET' : 'NOT SET'}`);
   
-  // 🌐 TENTA HTTP PROXY (SE CONFIGURADO)
+  // 🔥 PRIORIDADE 1: SOCKS5 PROXY (MELHOR PARA GEO-BYPASS)
+  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
+    try {
+      const socks5Url = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
+      console.log(`🔧 Net: Criando SOCKS5 proxy: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
+      const agent = new SocksProxyAgent(socks5Url, { keepAlive: true });
+      console.log(`✅ Net: SOCKS5 proxy criado com sucesso!`);
+      return agent;
+    } catch (error) {
+      console.error('❌ Erro criando SOCKS5 proxy:', error.message);
+      recordProxyFailure('SOCKS5 proxy creation error: ' + error.message);
+    }
+  }
+  
+  // 🌐 FALLBACK: HTTP PROXY (SE CONFIGURADO)
   if (PROXY_URL && PROXY_URL.trim() !== '') {
     try {
       if (proxyState.failures === 0) { // Log apenas na primeira tentativa
         console.log('🔧 Net: Usando HTTP proxy:', redactUrl(PROXY_URL));
       }
-      return new HttpsProxyAgent(PROXY_URL);
+      return new HttpsProxyAgent(PROXY_URL, { keepAlive: true });
     } catch (error) {
       recordProxyFailure('HTTP proxy creation error: ' + error.message);
-      return undefined;
     }
   }
   
-  // 🌐 SEM PROXY CONFIGURADO - CONEXÃO DIRETA
+  // 🌐 SEM PROXY CONFIGURADO - CONEXÃO DIRETA (PODE DAR GEO-BLOQUEIO)
   if (proxyState.mode !== 'direct') {
     proxyState.mode = 'direct';
-    console.log('🌐 Net: Conexão DIRETA (nenhum proxy configurado)');
+    console.log('⚠️ Net: Conexão DIRETA (sem proxy) - pode haver geo-bloqueio');
   }
   return undefined;
 }
