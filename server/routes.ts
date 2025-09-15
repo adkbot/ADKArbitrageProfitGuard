@@ -491,26 +491,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const marketData = await exchangeAPI.getMarketData(pair);
           
-          // Calculate if this is a valid arbitrage opportunity
+          // Calculate opportunity metrics
           const basisThreshold = parseFloat(config.basisEntry);
-          const isOpportunity = Math.abs(marketData.basisPercent) >= basisThreshold;
+          const isValidOpportunity = Math.abs(marketData.basisPercent) >= basisThreshold;
           
-          if (isOpportunity) {
-            const opportunity = {
-              ...marketData,
-              signal: marketData.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
-              potentialProfit: Math.abs(marketData.basisPercent) - basisThreshold,
-              confidence: Math.min(100, (Math.abs(marketData.basisPercent) / basisThreshold) * 50)
-            };
-            opportunities.push(opportunity);
-            
-            // 🔥 ATUALIZAR PERFORMANCE SCORE PARA RANKING COM DADOS REAIS
-            await storage.updatePairPerformanceScore(pair, {
-              basisPercent: marketData.basisPercent,
-              volume24h: marketData.volume24h || 0,
-              fundingRate: marketData.fundingRate || 0
-            });
-          }
+          // 🔥 SEMPRE incluir dados para visualização em tempo real
+          const opportunity = {
+            ...marketData,
+            signal: marketData.basisPercent > 0 ? 'long_spot_short_futures' : 'short_spot_long_futures',
+            potentialProfit: Math.abs(marketData.basisPercent) - basisThreshold,
+            confidence: Math.min(100, (Math.abs(marketData.basisPercent) / basisThreshold) * 50),
+            isValidOpportunity // Flag para indicar se é uma oportunidade real
+          };
+          
+          opportunities.push(opportunity);
+          
+          // 🔥 ATUALIZAR PERFORMANCE SCORE PARA RANKING COM DADOS REAIS
+          await storage.updatePairPerformanceScore(pair, {
+            basisPercent: marketData.basisPercent,
+            volume24h: marketData.volume24h || 0,
+            fundingRate: marketData.fundingRate || 0
+          });
         } catch (error) {
           console.error(`Failed to check arbitrage for ${pair}:`, error);
         }
