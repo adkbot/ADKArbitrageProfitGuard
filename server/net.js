@@ -14,13 +14,13 @@ const GEO_BLOCK_TTL = 6 * 60 * 60 * 1000; // 6 horas
 
 // 🧠 SISTEMA INTELIGENTE DE PROXY - Estado Centralizado
 let proxyState = {
-  mode: 'testing', // 'direct', 'testing', 'enabled', 'backoff'
-  failures: 0,
-  nextRetryAt: 0,
-  lastSuccessAt: 0,
+  mode: 'enabled', // 'direct', 'testing', 'enabled', 'backoff' - FORÇADO ENABLED PARA SOCKS5
+  failures: 0, // RESETADO PARA GARANTIR USO DO PROXY
+  nextRetryAt: 0, // SEM BACKOFF
+  lastSuccessAt: Date.now(), // MARCA COMO SUCESSO RECENTE
   lastError: null,
-  geoBlocked: false,
-  geoBlockedUntil: 0
+  geoBlocked: true, // GEO-BLOQUEIO DETECTADO
+  geoBlockedUntil: Date.now() + (6 * 60 * 60 * 1000) // 6 horas
 };
 
 /**
@@ -44,8 +44,8 @@ export function makeAgent() {
     return undefined;
   }
   
-  // 🌐 SE MODO DIRETO OU GEO-BLOQUEIO EXPIRADO, USA CONEXÃO DIRETA  
-  if (proxyState.mode === 'direct' || (proxyState.geoBlocked && now > proxyState.geoBlockedUntil)) {
+  // 🌐 SE MODO DIRETO (sem geo-bloqueio), USA CONEXÃO DIRETA  
+  if (proxyState.mode === 'direct' && !proxyState.geoBlocked) {
     return undefined;
   }
   
