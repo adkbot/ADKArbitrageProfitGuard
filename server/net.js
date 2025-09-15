@@ -25,19 +25,37 @@ let PROXY_TEMPORARILY_DISABLED = false;
  * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  // 🌐 VPS FRANKFURT ATIVO - RESOLVENDO BLOQUEIO GEOGRÁFICO!
+  // 🌐 SISTEMA INTELIGENTE DE PROXY - FRANKFURT VPS + FALLBACKS
+  
+  // 🌐 OPÇÃO 1: VPS FRANKFURT DIRETO (PRIORITÁRIO)
   const FRANKFURT_VPS_HOST = '165.227.168.225';
   const FRANKFURT_VPS_PORT = '1080';
   
-  console.log(`🌐 Usando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`);
+  console.log(`🌐 Net: Tentando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`);
   
   try {
     const socksProxy = `socks5h://${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`;
     return new SocksProxyAgent(socksProxy);
   } catch (error) {
-    console.error('❌ Erro configurando VPS Frankfurt, usando conexão direta:', error.message);
-    return undefined;
+    console.log('⚠️ Net: VPS Frankfurt indisponível, tentando variáveis...');
   }
+
+  // 🌐 OPÇÃO 2: USAR VARIÁVEIS DE AMBIENTE (FALLBACK)
+  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
+  
+  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
+    try {
+      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
+      console.log(`🔧 Net: Usando SOCKS5 das variáveis: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
+      return new SocksProxyAgent(socksProxy);
+    } catch (error) {
+      console.error('❌ Net: Erro SOCKS5 das variáveis:', error.message);
+    }
+  }
+
+  // 🌐 OPÇÃO 3: CONEXÃO DIRETA (ÚLTIMO FALLBACK)
+  console.log('🌐 Net: Usando conexão DIRETA - sistema "never die" ativo');
+  return undefined;
   
   const now = Date.now();
   

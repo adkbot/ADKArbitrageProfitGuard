@@ -41,20 +41,52 @@ const createHttpClient = () => {
     }
   };
   
-  // 🌐 VPS FRANKFURT ATIVO - RESOLVENDO BLOQUEIO GEOGRÁFICO!
+  // 🌐 SISTEMA INTELIGENTE DE PROXY - FRANKFURT VPS + FALLBACKS
+  const now = Date.now();
+  
+  // 🛡️ CIRCUIT BREAKER - Verifica se proxy está temporariamente desabilitado
+  if (httpProxyDisabledUntil > now) {
+    const remainingTime = Math.ceil((httpProxyDisabledUntil - now) / 1000);
+    console.log(`🚨 HTTP Proxy desabilitado por circuit breaker (${remainingTime}s restantes)`);
+    console.log('🌐 Usando conexão DIRETA temporariamente');
+    return axios.create(config);
+  }
+
+  // 🌐 OPÇÃO 1: VPS FRANKFURT DIRETO (PRIORITÁRIO)
   const FRANKFURT_VPS_HOST = '165.227.168.225';
   const FRANKFURT_VPS_PORT = '1080';
   
-  console.log(`🌐 HTTP Client usando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`);
+  console.log(`🌐 Tentando VPS Frankfurt: ${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`);
   
   try {
     const socksProxy = `socks5h://${FRANKFURT_VPS_HOST}:${FRANKFURT_VPS_PORT}`;
     config.httpsAgent = new SocksProxyAgent(socksProxy);
     config.httpAgent = new SocksProxyAgent(socksProxy);
-    console.log('✅ VPS Frankfurt configurado no HTTP Client');
+    console.log('✅ VPS Frankfurt configurado - resolvendo bloqueio geográfico!');
+    return axios.create(config);
   } catch (error) {
-    console.error('❌ Erro configurando VPS Frankfurt no HTTP Client:', (error as Error).message);
+    console.log('⚠️ VPS Frankfurt indisponível, tentando variáveis de ambiente...');
   }
+
+  // 🌐 OPÇÃO 2: USAR VARIÁVEIS DE AMBIENTE (FALLBACK)
+  const { PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
+  
+  if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
+    try {
+      const socksProxy = `socks5h://${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`;
+      console.log(`🔧 Usando SOCKS5 das variáveis: ${PROXY_SOCKS5_HOST}:${PROXY_SOCKS5_PORT}`);
+      config.httpsAgent = new SocksProxyAgent(socksProxy);
+      config.httpAgent = new SocksProxyAgent(socksProxy);
+      console.log('✅ Proxy SOCKS5 configurado com sucesso');
+      return axios.create(config);
+    } catch (error) {
+      console.error('❌ Erro configurando SOCKS5 das variáveis:', (error as Error).message);
+      recordHttpProxyFailure();
+    }
+  }
+
+  // 🌐 OPÇÃO 3: CONEXÃO DIRETA (ÚLTIMO FALLBACK)
+  console.log('🌐 Usando conexão DIRETA - sistema "never die" ativo');
   
   return axios.create(config);
 };
