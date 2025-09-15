@@ -391,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/exchange/balance', async (req, res) => {
     try {
       console.log('💰 API: Buscando saldos da carteira...');
-      const balance = await exchangeAPI.getAccountBalance();
+      const balance = await exchangeAPI.getBalance();
       res.json({
         ...balance,
         timestamp: new Date().toISOString(),

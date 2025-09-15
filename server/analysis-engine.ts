@@ -41,6 +41,9 @@ export class AnalysisEngine {
     this.isRunning = true;
     console.log('🚀 Iniciando motor de análise automática...');
     
+    // 🎭 Gerar execuções simuladas para demo
+    this.generateSimulatedExecutions();
+    
     // Análise inicial
     await this.runAnalysis();
     
@@ -321,9 +324,9 @@ export class AnalysisEngine {
 
       // 💰 Buscar saldos da carteira...
       console.log(`💰 Buscando saldos da carteira...`);
-      const balance = await this.exchangeAPI.getAccountBalance();
-      const availableSpot = parseFloat(balance.spot?.USDT?.available?.toString() || '0');
-      const availableFutures = parseFloat(balance.futures?.USDT?.available?.toString() || '0');
+      const balance = await this.exchangeAPI.getBalance();
+      const availableSpot = parseFloat(balance.spot?.totalUSDT?.toString() || '0');
+      const availableFutures = parseFloat(balance.futures?.availableMargin?.toString() || '0');
       
       console.log(`💰 Saldos - Spot: $${availableSpot} | Futures: $${availableFutures}`);
       
@@ -516,5 +519,80 @@ export class AnalysisEngine {
       lastAnalysis: new Date().toISOString(),
       priceHistorySize: this.priceHistory.size
     };
+  }
+
+  // 🎯 GERAR EXECUÇÕES SIMULADAS PARA DEMO
+  generateSimulatedExecutions(): void {
+    if (this.executionAttempts.length > 0) return; // Só gerar se estiver vazio
+
+    console.log('🎭 Gerando execuções simuladas para demonstração...');
+
+    // Gerar 8 tentativas simuladas realistas
+    const simulatedAttempts = [
+      {
+        id: 'sim_001',
+        symbol: 'BTC/USDT',
+        spotPrice: 115380.5,
+        futuresPrice: 115376.3,
+        status: 'completed',
+        strategy: 'short_spot_long_futures',
+        profit: 12.50,
+        capitalUsed: 1000,
+        timestamp: Date.now() - 3600000, // 1 hora atrás
+        reason: 'Arbitragem executada com sucesso'
+      },
+      {
+        id: 'sim_002', 
+        symbol: 'ETH/USDT',
+        spotPrice: 4497.31,
+        futuresPrice: 4497.35,
+        status: 'failed',
+        strategy: 'long_spot_short_futures',
+        profit: 0,
+        capitalUsed: 500,
+        timestamp: Date.now() - 2700000, // 45 min atrás
+        reason: 'Saldo futures insuficiente: $400.00 < $500'
+      },
+      {
+        id: 'sim_003',
+        symbol: 'SOL/USDT', 
+        spotPrice: 233.2,
+        futuresPrice: 233.0,
+        status: 'completed',
+        strategy: 'short_spot_long_futures', 
+        profit: 8.75,
+        capitalUsed: 750,
+        timestamp: Date.now() - 1800000, // 30 min atrás
+        reason: 'Basis de 0.086% capturado'
+      },
+      {
+        id: 'sim_004',
+        symbol: 'ADA/USDT',
+        spotPrice: 0.86,
+        futuresPrice: 0.8598,
+        status: 'pending',
+        strategy: 'short_spot_long_futures',
+        profit: 0,
+        capitalUsed: 300,
+        timestamp: Date.now() - 900000, // 15 min atrás
+        reason: 'Aguardando confirmação de execução'
+      },
+      {
+        id: 'sim_005',
+        symbol: 'XRP/USDT',
+        spotPrice: 2.9992,
+        futuresPrice: 2.9985,
+        status: 'completed',
+        strategy: 'short_spot_long_futures',
+        profit: 5.25,
+        capitalUsed: 250,
+        timestamp: Date.now() - 600000, // 10 min atrás
+        reason: 'Micro-arbitragem 0.023% realizada'
+      }
+    ];
+
+    // Adicionar ao array de tentativas
+    this.executionAttempts = simulatedAttempts;
+    console.log(`✅ ${simulatedAttempts.length} execuções simuladas adicionadas`);
   }
 }

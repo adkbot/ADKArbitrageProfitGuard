@@ -1,0 +1,156 @@
+Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Abrindo configurações
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Configuração salva: Object
+index-DONiAms-.js:269 Configuration saved: Object
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Abrindo configurações
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:269 Bot iniciado
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+/api/exchange/balance:1  Failed to load resource: the server responded with a status of 500 ()Understand this error
+index-DONiAms-.js:48  GET https://adk-arbitrage-profit-guard-idbprdaniel.replit.app/api/exchange/balance 500 (Internal Server Error)
+(anonymous) @ index-DONiAms-.js:48
+i @ index-DONiAms-.js:48
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48Understand this error
+index-DONiAms-.js:48  GET https://adk-arbitrage-profit-guard-idbprdaniel.replit.app/api/exchange/balance 500 (Internal Server Error)
+(anonymous) @ index-DONiAms-.js:48
+i @ index-DONiAms-.js:48
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+setInterval
+Sf @ index-DONiAms-.js:48
+_f @ index-DONiAms-.js:48
+onQueryUpdate @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+batch @ index-DONiAms-.js:48
+In @ index-DONiAms-.js:48
+a @ index-DONiAms-.js:48
+h @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+Promise.catch
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48Understand this error
+index-DONiAms-.js:48  GET https://adk-arbitrage-profit-guard-idbprdaniel.replit.app/api/exchange/balance 500 (Internal Server Error)
+(anonymous) @ index-DONiAms-.js:48
+i @ index-DONiAms-.js:48
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+setInterval
+Sf @ index-DONiAms-.js:48
+_f @ index-DONiAms-.js:48
+onQueryUpdate @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+batch @ index-DONiAms-.js:48
+In @ index-DONiAms-.js:48
+a @ index-DONiAms-.js:48
+h @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+Promise.catch
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+setInterval
+Sf @ index-DONiAms-.js:48
+_f @ index-DONiAms-.js:48
+onQueryUpdate @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+batch @ index-DONiAms-.js:48
+In @ index-DONiAms-.js:48
+a @ index-DONiAms-.js:48
+h @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+Promise.catch
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48Understand this error
+index-DONiAms-.js:48  GET https://adk-arbitrage-profit-guard-idbprdaniel.replit.app/api/exchange/balance 500 (Internal Server Error)
+(anonymous) @ index-DONiAms-.js:48
+i @ index-DONiAms-.js:48
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+setInterval
+Sf @ index-DONiAms-.js:48
+_f @ index-DONiAms-.js:48
+onQueryUpdate @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+batch @ index-DONiAms-.js:48
+In @ index-DONiAms-.js:48
+a @ index-DONiAms-.js:48
+h @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+Promise.catch
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+setInterval
+Sf @ index-DONiAms-.js:48
+_f @ index-DONiAms-.js:48
+onQueryUpdate @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+batch @ index-DONiAms-.js:48
+In @ index-DONiAms-.js:48
+a @ index-DONiAms-.js:48
+h @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+Promise.catch
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+setInterval
+Sf @ index-DONiAms-.js:48
+_f @ index-DONiAms-.js:48
+onQueryUpdate @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+batch @ index-DONiAms-.js:48
+In @ index-DONiAms-.js:48
+a @ index-DONiAms-.js:48
+h @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48
+Promise.catch
+y @ index-DONiAms-.js:48
+start @ index-DONiAms-.js:48
+fetch @ index-DONiAms-.js:48
+fo @ index-DONiAms-.js:48
+(anonymous) @ index-DONiAms-.js:48Understand this error

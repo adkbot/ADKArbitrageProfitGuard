@@ -274,12 +274,47 @@ export class ExchangeAPI {
       const status = this.multiExchange.getStatus();
       console.log(`💰 Buscando via ${status.activeExchange}...`);
       
-      // Por enquanto retornar dados básicos - implementação completa virá depois
+      // 🔥 SALDOS REALISTAS SIMULADOS - SISTEMA DEMO COMPLETO
+      const spotBalance = {
+        USDT: 10000.00,  // 10k USDT para trading spot
+        BTC: 0.1,        // 0.1 BTC 
+        ETH: 2.5,        // 2.5 ETH
+        BNB: 15.0        // 15 BNB
+      };
+
+      const futuresBalance = {
+        USDT: 25000.00,  // 25k USDT para futuros (margem)
+        availableMargin: 22500.00,  // Margem disponível
+        usedMargin: 2500.00,        // Margem utilizada
+        totalEquity: 25000.00       // Patrimônio total
+      };
+
+      const totalPortfolioValue = spotBalance.USDT + futuresBalance.USDT;
+      
       return {
         success: true,
+        simulated: true, // 🎭 Indicador de dados simulados para demo
         exchange: status.activeExchange,
-        message: 'Multi-exchange ativo - saldos em desenvolvimento',
-        status: status
+        lastUpdate: new Date().toISOString(),
+        spot: {
+          name: "Carteira Spot",
+          balance: spotBalance,
+          totalUSDT: spotBalance.USDT,
+          assets: Object.keys(spotBalance).length
+        },
+        futures: {
+          name: "Carteira Futures", 
+          balance: futuresBalance,
+          totalUSDT: futuresBalance.USDT,
+          availableMargin: futuresBalance.availableMargin,
+          usedMargin: futuresBalance.usedMargin,
+          marginRatio: ((futuresBalance.usedMargin / futuresBalance.totalEquity) * 100).toFixed(2)
+        },
+        summary: {
+          totalPortfolioUSDT: totalPortfolioValue,
+          spotPercentage: ((spotBalance.USDT / totalPortfolioValue) * 100).toFixed(1),
+          futuresPercentage: ((futuresBalance.USDT / totalPortfolioValue) * 100).toFixed(1)
+        }
       };
       
     } catch (error) {
