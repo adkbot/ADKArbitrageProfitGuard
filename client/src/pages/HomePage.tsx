@@ -44,11 +44,25 @@ export default function HomePage() {
     refetchInterval: 2000, // Atualização muito rápida para mostrar tentativas
     staleTime: 1000,
   });
+
+  // 💰 BUSCAR SALDOS REAIS DAS CARTEIRAS (Futuro e Spot)
+  const { data: balanceData = {}, isLoading: loadingBalance } = useQuery({
+    queryKey: ['/api/exchange/balance'],
+    refetchInterval: 10000, // Atualização a cada 10 segundos
+    staleTime: 5000,
+  });
   // 🔥 PROCESSAMENTO DE DADOS REAIS APENAS
   const opportunitiesArray = Array.isArray(opportunities) ? opportunities : [];
   const tradesArray = Array.isArray(trades) ? trades : [];
   const botDataTyped = botData as { activeTrades?: number; todayTrades?: number; pairs?: string[] } || {};
   const executionAttempts = (executionData as any)?.attempts || [];
+  
+  // 💰 PROCESSAMENTO DE DADOS DE SALDO REAIS
+  const balanceDataTyped = balanceData as any || {};
+  const spotBalance = balanceDataTyped.spot?.USDT?.available || 0;
+  const futuresBalance = balanceDataTyped.futures?.USDT?.available || 0;
+  const totalBalance = spotBalance + futuresBalance;
+  const balanceError = !balanceDataTyped.success;
   
   const topOpportunities = opportunitiesArray
     .sort((a: any, b: any) => Math.abs(b.basisPercent) - Math.abs(a.basisPercent))
@@ -96,6 +110,20 @@ export default function HomePage() {
 
   // Calcular métricas reais baseadas nos dados da API
   const realMetrics = [
+    {
+      id: 'futures-balance',
+      title: 'Carteira Futuro',
+      value: balanceError ? 'Erro' : `$${futuresBalance.toFixed(2)}`,
+      icon: <DollarSign className="w-4 h-4" />,
+      description: 'saldo disponível'
+    },
+    {
+      id: 'spot-balance',
+      title: 'Carteira Spot',
+      value: balanceError ? 'Erro' : `$${spotBalance.toFixed(2)}`,
+      icon: <DollarSign className="w-4 h-4" />,
+      description: 'saldo disponível'
+    },
     {
       id: 'current-opportunities',
       title: 'Oportunidades Ativas',
