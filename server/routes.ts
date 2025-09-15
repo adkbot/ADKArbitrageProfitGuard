@@ -298,23 +298,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🌐 STATUS DETALHADO DA REDE (usa sistema proxy existente)
+  // 🌐 STATUS DETALHADO DA REDE - Alias para /api/proxy/status
   app.get('/api/network/status', async (req, res) => {
     try {
-      const { getProxyStatus } = await import('./proxy');
-      const proxyStatus = getProxyStatus();
       const networkStatus = getNetworkStatus();
-      
       return res.json({
         success: true,
-        proxyMode: proxyStatus.enabled ? 'enabled' : 'direct',
-        connectionStatus: proxyStatus.enabled ? 'proxy' : 'direct',
-        lastSuccess: networkStatus.lastSuccess,
+        mode: networkStatus.geoBlocked ? 'blocked' : 'working',
+        proxyEnabled: process.env.PROXY_ENABLED === 'true',
         geoBlocked: networkStatus.geoBlocked,
+        lastSuccess: networkStatus.lastSuccess,
         fallbackActive: networkStatus.fallbackActive,
-        proxyUrl: proxyStatus.url || 'none',
-        fallbacks: proxyStatus.fallbacks || 0,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        recommendation: networkStatus.geoBlocked ? 
+          'Configure PROXY_URL ou PROXY_SOCKS5_HOST para bypassar geo-bloqueio' : 
+          'Sistema funcionando normalmente'
       });
     } catch (error) {
       console.error('Erro getting network status:', error);
@@ -387,46 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // 🔍 STATUS DETALHADO DO MOTOR DE ANÁLISE
-  app.get('/api/engine/status', async (req, res) => {
-    try {
-      const engineStatus = analysisEngine.getStatus();
-      const networkStatus = getNetworkStatus();
-      
-      const status = {
-        success: true,
-        engine: {
-          isActive: engineStatus.isRunning,
-          lastAnalysis: engineStatus.lastAnalysis,
-          symbolsMonitored: engineStatus.symbolsMonitored,
-          priceHistorySize: engineStatus.priceHistorySize,
-          health: engineStatus.isRunning ? 'healthy' : 'stopped'
-        },
-        network: {
-          proxyMode: networkStatus.proxyMode,
-          connectionStatus: networkStatus.connectionStatus,
-          lastSuccessfulConnection: networkStatus.lastSuccess,
-          geoBlocked: networkStatus.geoBlocked,
-          fallbacksActive: networkStatus.fallbackActive
-        },
-        performance: {
-          activeOpportunities: opportunities.length || 0,
-          averageResponseTime: networkStatus.avgResponseTime || 'N/A',
-          successRate: networkStatus.successRate || 'N/A'
-        },
-        timestamp: new Date().toISOString()
-      };
-
-      return res.json(status);
-    } catch (error) {
-      console.error('Erro getting engine status:', error);
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Erro interno do servidor',
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
+  // Endpoint movido para depois da declaração de analysisEngine
 
   // 💰 SALDOS DA CARTEIRA (SPOT + FUTURES)
   app.get('/api/exchange/balance', async (req, res) => {
@@ -766,6 +725,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update scores' });
+    }
+  });
+
+  // 🔍 STATUS DETALHADO DO MOTOR DE ANÁLISE
+  app.get('/api/engine/status', async (req, res) => {
+    try {
+      const engineStatus = analysisEngine.getStatus();
+      const networkStatus = getNetworkStatus();
+      
+      const status = {
+        success: true,
+        engine: {
+          isActive: engineStatus.isRunning,
+          lastAnalysis: engineStatus.lastAnalysis,
+          symbolsMonitored: engineStatus.symbolsMonitored,
+          priceHistorySize: engineStatus.priceHistorySize,
+          health: engineStatus.isRunning ? 'healthy' : 'stopped'
+        },
+        network: {
+          proxyMode: networkStatus.proxyMode,
+          connectionStatus: networkStatus.connectionStatus,
+          lastSuccessfulConnection: networkStatus.lastSuccess,
+          geoBlocked: networkStatus.geoBlocked,
+          fallbacksActive: networkStatus.fallbackActive
+        },
+        performance: {
+          activeOpportunities: 0, // Valor fixo por enquanto
+          averageResponseTime: networkStatus.avgResponseTime || 'N/A',
+          successRate: networkStatus.successRate || 'N/A'
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      return res.json(status);
+    } catch (error) {
+      console.error('Erro getting engine status:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Erro interno do servidor',
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
