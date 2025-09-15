@@ -204,7 +204,7 @@ router.post('/user/stop', authMiddleware, (req: any, res) => {
 });
 
 // 🔧 Configurar API keys
-router.post('/user/config', authMiddleware, (req: any, res) => {
+router.post('/user/config', authMiddleware, async (req: any, res) => {
   try {
     const { binanceApiKey, binanceSecretKey, maxTradeAmount, riskLevel } = req.body;
     
@@ -215,7 +215,42 @@ router.post('/user/config', authMiddleware, (req: any, res) => {
       });
     }
 
-    // Configurar exchange
+    console.log(`🔑 Salvando credenciais REAIS para BINANCE via multiusuário...`);
+
+    // 🚨 SALVAR NO STORAGE PRINCIPAL PARA QUE O EXCHANGEAPI POSSA ACESSAR
+    const { storage } = require('./storage');
+    
+    // Buscar configuração atual
+    let config = await storage.getBotConfig();
+    if (!config) {
+      // Criar config padrão se não existir
+      config = await storage.updateBotConfig({
+        pairs: ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'],
+        basisEntry: 0.004,
+        basisExit: 0.0015,
+        maxNotionalUsdt: maxTradeAmount || 1000,
+        maxDailyTrades: 10,
+        slippageK: 0.002,
+        fundingLookaheadH: 8,
+        wyckoffN: 100,
+        gexRefreshSec: 300,
+        arbitrageEnabled: true
+      });
+    }
+
+    // Atualizar com as API keys do usuário no storage principal
+    const updateData = {
+      ...config,
+      selectedExchange: 'binance',
+      binanceApiKey: binanceApiKey,
+      binanceApiSecret: binanceSecretKey,
+      maxNotionalUsdt: maxTradeAmount || config.maxNotionalUsdt
+    };
+
+    // Salvar configuração atualizada no storage principal
+    await storage.updateBotConfig(updateData);
+
+    // 🔧 CONFIGURAR TAMBÉM NO SISTEMA MULTIUSUÁRIO (COMPATIBILIDADE)
     const exchangeSuccess = userManager.setUserExchange(req.userId, binanceApiKey, binanceSecretKey);
     
     // Atualizar perfil do usuário
@@ -231,6 +266,8 @@ router.post('/user/config', authMiddleware, (req: any, res) => {
       state.riskSettings.maxTradeAmount = maxTradeAmount;
     }
 
+    console.log(`✅ Credenciais BINANCE salvas no storage principal e sistema multiusuário`);
+
     if (exchangeSuccess) {
       res.json({
         success: true,
@@ -245,6 +282,7 @@ router.post('/user/config', authMiddleware, (req: any, res) => {
       res.status(500).json({ success: false, error: 'Falha ao configurar exchange' });
     }
   } catch (error) {
+    console.error('❌ Erro ao salvar credenciais multiusuário:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
