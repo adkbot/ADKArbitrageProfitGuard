@@ -17,11 +17,8 @@ const createHttpClient = () => {
     }
   };
   
-  // 🚨 PROXY TEMPORARIAMENTE DESABILITADO - axios configurado para conexão direta
-  console.log('🌐 HTTP-CLIENT: PROXY DESABILITADO - usando conexão DIRETA');
+  // 🚀 PROXY SOCKS5 REATIVADO - usando VPS sem restrições
   
-  // Código original comentado para debug
-  /*
   // 🔧 APLICAR PROXY SE DISPONÍVEL
   const { PROXY_URL, PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT } = process.env;
   
@@ -47,7 +44,6 @@ const createHttpClient = () => {
   } else {
     console.log('🌐 Axios configurado para conexão DIRETA');
   }
-  */
   
   return axios.create(config);
 };

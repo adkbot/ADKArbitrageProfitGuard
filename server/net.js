@@ -15,12 +15,8 @@ const { PROXY_URL, PROXY_SOCKS5_HOST, PROXY_SOCKS5_PORT, BINANCE_API_KEY, BINANC
  * - Se nenhum proxy definido → conexão direta
  */
 export function makeAgent() {
-  // 🚨 PROXY TEMPORARIAMENTE DESABILITADO - conexão direta forçada
-  console.log('🌐 Net: PROXY DESABILITADO - usando conexão DIRETA');
-  return undefined;
+  // 🚀 PROXY SOCKS5 REATIVADO - usando VPS sem restrições
   
-  // Código original comentado para debug
-  /*
   // Prioridade: SOCKS5 primeiro
   if (PROXY_SOCKS5_HOST && PROXY_SOCKS5_PORT) {
     try {
@@ -44,7 +40,6 @@ export function makeAgent() {
   
   console.log('🌐 Net: Nenhum proxy definido - usando conexão DIRETA');
   return undefined;
-  */
 }
 
 /**
