@@ -25,11 +25,19 @@ let currentHttpsAgent: any = null;
 let wsProxyAgent: any = null;
 let originalFetch: typeof fetch;
 
-// 🔥 LISTA DE PROXIES - APENAS URLS REAIS (USUÁRIO DEVE CONFIGURAR)
+// 🔥 LISTA DE PROXIES - RENDER.COM OPTIMIZED FALLBACKS
 const RELIABLE_PROXY_FALLBACKS: string[] = [
-  // LISTA VAZIA - usuário deve configurar PROXY_URL se necessário
-  // Exemplo: 'http://meu-proxy-real:3128'
-];
+  // Internal Render proxy service (configured via render.yaml)
+  process.env.RENDER_INTERNAL_PROXY_URL,
+  // External proxy services for Render deployment
+  process.env.PROXY_URL_RESIDENTIAL_1,
+  process.env.PROXY_URL_RESIDENTIAL_2,
+  process.env.PROXY_URL_DATACENTER_1,
+  process.env.PROXY_URL_DATACENTER_2,
+  // Backup proxy services
+  process.env.PROXY_URL_BACKUP_1,
+  process.env.PROXY_URL_BACKUP_2
+].filter(Boolean) as string[];
 
 // 🛡️ GLOBAL HTTP AGENTS FOR ALL NETWORK CALLS
 let globalHttpAgent: http.Agent | null = null;

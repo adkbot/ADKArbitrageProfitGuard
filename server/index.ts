@@ -3,7 +3,9 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
 import { initializeExchangeAPI } from "./exchange";
-// 🚨 PROXY SYSTEM COMPLETELY DISABLED - DIRECT CONNECTION ONLY!
+import { initializeProxy } from "./proxy";
+import { testGeoBypass } from "./geo-bypass";
+// 🌐 RENDER.COM PRODUCTION READY WITH GEO-BYPASS SYSTEM
 
 const app = express();
 app.use(express.json());
@@ -41,8 +43,25 @@ app.use((req, res, next) => {
 
 // 🌐 INITIALIZE GLOBAL PROXY SYSTEM BEFORE ANY NETWORK CALLS
 async function startServer() {
-  // Initialize global proxy system first
-  // await initializeProxy(); // DESABILITADO - usar PROXY_URL se necessário
+  console.log('🚀 Starting ADK Arbitrage Profit Guard - Render.com Production');
+  
+  // Initialize global proxy system first for geo-bypass
+  console.log('🌐 Initializing geo-bypass proxy system...');
+  await initializeProxy();
+  
+  // Test geo-bypass capabilities
+  console.log('🧪 Testing geo-bypass system...');
+  try {
+    const geoBypassTest = await testGeoBypass();
+    if (geoBypassTest.success) {
+      console.log('✅ Geo-bypass system operational');
+    } else {
+      console.warn('⚠️ Geo-bypass system has issues, but continuing...');
+    }
+  } catch (error) {
+    console.error('❌ Geo-bypass test failed:', error);
+    console.log('🔄 Continuing with direct connections...');
+  }
   
   // 🔑 INICIALIZAR EXCHANGE API COM STORAGE PARA CREDENCIAIS REAIS
   console.log('🔍 Inicializando sistema multi-exchange...');

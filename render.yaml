@@ -1,0 +1,144 @@
+
+# 🚀 RENDER.COM PRODUCTION CONFIGURATION
+# Configuração completa para deploy no Render.com com suporte a geo-bloqueio
+
+services:
+  # 🌐 Main Web Service - ADK Arbitrage Profit Guard
+  - type: web
+    name: adk-arbitrage-profit-guard
+    runtime: node
+    plan: starter # Upgrade to standard/pro for better performance
+    region: oregon # US West Coast - good for crypto exchanges
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    
+    # 🔧 Environment Variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
+      
+      # 🌐 Proxy Configuration for Geo-blocking Bypass
+      - key: PROXY_ENABLED
+        value: true
+      - key: PROXY_URL
+        fromService:
+          type: pserv
+          name: proxy-service
+          property: connectionString
+      - key: PROXY_URL_2
+        sync: false # Set via dashboard
+      - key: PROXY_URL_3
+        sync: false # Set via dashboard
+      - key: PROXY_TEST_TIMEOUT
+        value: 15000
+      - key: PROXY_NO_PROXY
+        value: localhost,127.0.0.1,*.local,*.render.com
+      
+      # 🔑 Exchange API Keys (Set via Render Dashboard - NEVER commit these)
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false
+      - key: OKX_API_KEY
+        sync: false
+      - key: OKX_API_SECRET
+        sync: false
+      - key: OKX_PASSPHRASE
+        sync: false
+      - key: BYBIT_API_KEY
+        sync: false
+      - key: BYBIT_API_SECRET
+        sync: false
+      
+      # 🛡️ Security & Trading Configuration
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REAL_TRADING_ENABLED
+        value: false # Enable only after thorough testing
+      - key: PAPER_TRADING_MODE
+        value: true
+      - key: MAX_NOTIONAL_USDT
+        value: 1000
+      - key: MAX_DAILY_TRADES
+        value: 20
+      - key: MIN_PROFIT_THRESHOLD
+        value: 0.001
+      
+      # 📊 Performance & Monitoring
+      - key: LOG_LEVEL
+        value: info
+      - key: RATE_LIMIT_REQUESTS_PER_MINUTE
+        value: 100
+      - key: CACHE_TTL_SECONDS
+        value: 30
+      - key: GEX_REFRESH_SEC
+        value: 300
+      
+      # 🎯 Trading Pairs & Parameters
+      - key: PAIRS
+        value: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,ADA/USDT
+      - key: BASIS_ENTRY
+        value: 0.001
+      - key: BASIS_EXIT
+        value: 0.0005
+      - key: SLIPPAGE_K
+        value: 0.0002
+      - key: FUNDING_LOOKAHEAD_H
+        value: 8
+      - key: WYCKOFF_N
+        value: 50
+      - key: ARBITRAGE_ENABLED
+        value: true
+
+  # 🌐 Private Proxy Service for Geo-blocking Bypass
+  - type: pserv
+    name: proxy-service
+    runtime: docker
+    plan: starter
+    region: oregon
+    
+    # Use a lightweight proxy solution
+    dockerfilePath: ./docker/Dockerfile.proxy
+    
+    envVars:
+      - key: PROXY_PORT
+        value: 8080
+      - key: PROXY_AUTH_USER
+        generateValue: true
+      - key: PROXY_AUTH_PASS
+        generateValue: true
+      - key: LOG_LEVEL
+        value: info
+
+databases:
+  # 📊 PostgreSQL Database for user data and trading history
+  - name: adk-arbitrage-db
+    databaseName: adk_arbitrage_prod
+    user: adk_user
+    plan: starter # Upgrade as needed
+    region: oregon
+    
+    # Database will be automatically connected via DATABASE_URL env var
+
+# 🔧 Build Configuration
+buildFilter:
+  paths:
+    - server/**
+    - client/**
+    - shared/**
+    - package.json
+    - package-lock.json
+    - tsconfig.json
+    - vite.config.ts
+    - tailwind.config.ts
+  ignoredPaths:
+    - "*.md"
+    - "*.pdf"
+    - logs/**
+    - .git/**
+    - node_modules/**

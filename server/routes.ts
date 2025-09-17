@@ -12,14 +12,148 @@ import publicApiRoutes from "./public-api.js";
 import { UserManager } from "./user-manager.js";
 import { AuthManager } from "./auth.js";
 import { getNetworkStatus } from "./net.js";
+import { performHealthCheck, quickHealthCheck, getSystemMetrics } from "./health-check";
+import { getProxyStatus, testProxyConnectivity } from "./proxy";
+import { getGeoBypassStatus, testGeoBypass } from "./geo-bypass";
+import { performExchangeHealthCheck, getRenderDeploymentStatus } from "./exchange-render";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Health check endpoint
+  // 🏥 RENDER.COM HEALTH CHECK ENDPOINTS
+  
+  // Quick health check for Render.com health monitoring
+  app.get("/health", async (req, res) => {
+    try {
+      const health = await quickHealthCheck();
+      res.status(health.status === 'healthy' ? 200 : 503).json(health);
+    } catch (error) {
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: (error as Error).message
+      });
+    }
+  });
+
+  // Comprehensive health check
+  app.get("/api/health/full", async (req, res) => {
+    try {
+      const health = await performHealthCheck();
+      const statusCode = health.status === 'healthy' ? 200 : 
+                        health.status === 'degraded' ? 206 : 503;
+      res.status(statusCode).json(health);
+    } catch (error) {
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: (error as Error).message
+      });
+    }
+  });
+
+  // System metrics endpoint
+  app.get("/api/metrics", (req, res) => {
+    try {
+      const metrics = getSystemMetrics();
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // 🌐 GEO-BYPASS AND PROXY STATUS ENDPOINTS
+  
+  // Proxy status
+  app.get("/api/proxy/status", (req, res) => {
+    try {
+      const status = getProxyStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Test proxy connectivity
+  app.post("/api/proxy/test", async (req, res) => {
+    try {
+      const result = await testProxyConnectivity();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Geo-bypass status
+  app.get("/api/geo-bypass/status", (req, res) => {
+    try {
+      const status = getGeoBypassStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Test geo-bypass system
+  app.post("/api/geo-bypass/test", async (req, res) => {
+    try {
+      const result = await testGeoBypass();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // 🏦 EXCHANGE CONNECTIVITY ENDPOINTS
+  
+  // Exchange health check
+  app.get("/api/exchanges/health", async (req, res) => {
+    try {
+      const health = await performExchangeHealthCheck();
+      const statusCode = health.overall ? 200 : 503;
+      res.status(statusCode).json(health);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Render deployment status
+  app.get("/api/render/status", (req, res) => {
+    try {
+      const status = getRenderDeploymentStatus();
+      res.json(status);
+    } catch (error) {
+      res.status(500).json({
+        error: (error as Error).message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Legacy health check endpoint
   app.get("/api", (req, res) => {
     res.json({
       ok: true,
       timestamp: new Date().toISOString(),
-      service: "adk-arbitragem",
+      service: "adk-arbitrage-profit-guard",
+      version: "2.0.0-render",
+      environment: process.env.NODE_ENV || 'development'
     });
   });
 

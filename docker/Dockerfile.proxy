@@ -1,0 +1,25 @@
+
+# 🌐 Lightweight Proxy Service for Geo-blocking Bypass
+FROM node:18-alpine
+
+# Install necessary packages
+RUN apk add --no-cache curl
+
+# Create app directory
+WORKDIR /app
+
+# Create a simple HTTP proxy using Node.js
+COPY docker/proxy-server.js .
+
+# Install dependencies
+RUN npm init -y && npm install http-proxy-middleware express
+
+# Expose proxy port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# Start proxy server
+CMD ["node", "proxy-server.js"]
