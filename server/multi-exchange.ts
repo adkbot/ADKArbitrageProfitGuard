@@ -684,6 +684,32 @@ export class MultiExchangeManager {
   }
 
   /**
+   * 🔑 OBTER INSTÂNCIA DE EXCHANGE FUTURES PARA OPERAÇÕES COM CREDENCIAIS REAIS
+   */
+  getFuturesExchangeInstance(exchangeName: string): any {
+    console.log(`🔍 Buscando instância futures para exchange: ${exchangeName}`);
+
+    // Normalizar nome da exchange (minúsculo)
+    const normalizedName = exchangeName.toLowerCase();
+
+    // Verificar se a exchange existe
+    if (!EXCHANGES[normalizedName]) {
+      console.log(`❌ Exchange futures ${exchangeName} não suportada`);
+      return null;
+    }
+
+    // Retornar a instância futures da exchange
+    const instance = this.futuresExchanges[normalizedName];
+    if (instance) {
+      console.log(`✅ Instância futures ${exchangeName} encontrada`);
+      return instance;
+    } else {
+      console.log(`⚠️ Instância futures ${exchangeName} não inicializada`);
+      return null;
+    }
+  }
+
+  /**
    * 📦 Order book (bids/asks) com fallback simples
    */
   async getOrderBook(symbol: string, limit: number = 20): Promise<any> {
