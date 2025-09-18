@@ -857,6 +857,335 @@ export class MultiExchangeManager {
 
     return out;
   }
+
+  /**
+   * 🔍 TESTE DE CONEXÃO COMPLETO - DIAGNÓSTICO DETALHADO DO SISTEMA
+   * Testa conectividade, latência e funcionalidade de todas as exchanges
+   */
+  async testConnection(): Promise<{
+    success: boolean;
+    activeExchange: string;
+    exchanges: Array<{
+      name: string;
+      id: string;
+      available: boolean;
+      latency?: number;
+      error?: string;
+      endpoints: {
+        spot: { status: string; latency?: number; error?: string };
+        futures: { status: string; latency?: number; error?: string };
+        test: { status: string; latency?: number; error?: string };
+      };
+      features: {
+        spotTrading: boolean;
+        futuresTrading: boolean;
+        dataAccess: boolean;
+      };
+    }>;
+    systemHealth: {
+      overallStatus: string;
+      availableExchanges: number;
+      totalExchanges: number;
+      primaryExchangeOnline: boolean;
+      fallbackAvailable: boolean;
+    };
+    testResults: {
+      spotPriceTest: { success: boolean; symbol?: string; price?: number; exchange?: string; error?: string };
+      futuresPriceTest: { success: boolean; symbol?: string; price?: number; exchange?: string; error?: string };
+      fundingRateTest: { success: boolean; symbol?: string; rate?: number; exchange?: string; error?: string };
+      volumeTest: { success: boolean; symbol?: string; volume?: number; exchange?: string; error?: string };
+      marketDataTest: { success: boolean; symbol?: string; data?: any; error?: string };
+    };
+    recommendations: string[];
+    timestamp: number;
+  }> {
+    console.log("🔍 Iniciando teste de conexão completo...");
+    const startTime = Date.now();
+    
+    const results = {
+      success: false,
+      activeExchange: this.activeExchange,
+      exchanges: [] as any[],
+      systemHealth: {
+        overallStatus: "UNKNOWN",
+        availableExchanges: 0,
+        totalExchanges: Object.keys(EXCHANGES).length,
+        primaryExchangeOnline: false,
+        fallbackAvailable: false
+      },
+      testResults: {
+        spotPriceTest: { success: false },
+        futuresPriceTest: { success: false },
+        fundingRateTest: { success: false },
+        volumeTest: { success: false },
+        marketDataTest: { success: false }
+      },
+      recommendations: [] as string[],
+      timestamp: Date.now()
+    };
+
+    // 1. TESTAR CADA EXCHANGE INDIVIDUALMENTE
+    console.log("📊 Testando conectividade de cada exchange...");
+    
+    for (const [exchangeId, config] of Object.entries(EXCHANGES)) {
+      const exchangeResult = {
+        name: config.name,
+        id: exchangeId,
+        available: false,
+        latency: 0,
+        error: undefined as string | undefined,
+        endpoints: {
+          spot: { status: "UNKNOWN" },
+          futures: { status: "UNKNOWN" },
+          test: { status: "UNKNOWN" }
+        },
+        features: {
+          spotTrading: false,
+          futuresTrading: false,
+          dataAccess: false
+        }
+      };
+
+      try {
+        // Teste de conectividade básica
+        const testStart = Date.now();
+        const isAvailable = await this.testExchange(exchangeId);
+        const testLatency = Date.now() - testStart;
+        
+        exchangeResult.available = isAvailable;
+        exchangeResult.latency = testLatency;
+
+        if (isAvailable) {
+          // Teste de endpoints específicos
+          try {
+            const spotEx = this.spotExchanges[exchangeId];
+            if (spotEx) {
+              const spotStart = Date.now();
+              await spotEx.fetchStatus();
+              exchangeResult.endpoints.spot = {
+                status: "OK",
+                latency: Date.now() - spotStart
+              };
+              exchangeResult.features.spotTrading = true;
+              exchangeResult.features.dataAccess = true;
+            }
+          } catch (error: any) {
+            exchangeResult.endpoints.spot = {
+              status: "ERROR",
+              error: error.message
+            };
+          }
+
+          try {
+            const futuresEx = this.futuresExchanges[exchangeId];
+            if (futuresEx) {
+              const futuresStart = Date.now();
+              await futuresEx.fetchStatus();
+              exchangeResult.endpoints.futures = {
+                status: "OK",
+                latency: Date.now() - futuresStart
+              };
+              exchangeResult.features.futuresTrading = true;
+            }
+          } catch (error: any) {
+            exchangeResult.endpoints.futures = {
+              status: "ERROR",
+              error: error.message
+            };
+          }
+
+          // Teste de endpoint de teste específico
+          try {
+            const testStart = Date.now();
+            const response = await fetch(config.endpoints.testEndpoint, {
+              method: 'GET',
+              timeout: 5000
+            });
+            
+            if (response.ok) {
+              exchangeResult.endpoints.test = {
+                status: "OK",
+                latency: Date.now() - testStart
+              };
+            } else {
+              exchangeResult.endpoints.test = {
+                status: "ERROR",
+                error: `HTTP ${response.status}`
+              };
+            }
+          } catch (error: any) {
+            exchangeResult.endpoints.test = {
+              status: "ERROR",
+              error: error.message
+            };
+          }
+
+          console.log(`✅ ${config.name}: OK (${testLatency}ms)`);
+        } else {
+          console.log(`❌ ${config.name}: FALHOU`);
+          exchangeResult.error = "Teste de conectividade falhou";
+        }
+
+      } catch (error: any) {
+        console.log(`❌ ${config.name}: ERRO - ${error.message}`);
+        exchangeResult.error = error.message;
+        exchangeResult.available = false;
+      }
+
+      results.exchanges.push(exchangeResult);
+    }
+
+    // 2. CALCULAR SAÚDE DO SISTEMA
+    const availableExchanges = results.exchanges.filter(ex => ex.available);
+    results.systemHealth.availableExchanges = availableExchanges.length;
+    
+    const primaryExchange = results.exchanges.find(ex => ex.id === 'binance');
+    results.systemHealth.primaryExchangeOnline = primaryExchange?.available || false;
+    
+    const fallbackExchanges = results.exchanges.filter(ex => ex.id !== 'binance' && ex.available);
+    results.systemHealth.fallbackAvailable = fallbackExchanges.length > 0;
+
+    // Determinar status geral
+    if (results.systemHealth.availableExchanges === 0) {
+      results.systemHealth.overallStatus = "CRITICAL";
+    } else if (results.systemHealth.primaryExchangeOnline) {
+      results.systemHealth.overallStatus = "HEALTHY";
+    } else if (results.systemHealth.fallbackAvailable) {
+      results.systemHealth.overallStatus = "DEGRADED";
+    } else {
+      results.systemHealth.overallStatus = "CRITICAL";
+    }
+
+    // 3. TESTES FUNCIONAIS
+    console.log("🧪 Executando testes funcionais...");
+    
+    // Teste de preço spot
+    try {
+      const spotResult = await this.getSpotPrice("BTC/USDT");
+      results.testResults.spotPriceTest = {
+        success: true,
+        symbol: "BTC/USDT",
+        price: spotResult.price,
+        exchange: spotResult.exchange
+      };
+      console.log(`✅ Preço Spot: BTC/USDT = $${spotResult.price} via ${spotResult.exchange}`);
+    } catch (error: any) {
+      results.testResults.spotPriceTest = {
+        success: false,
+        error: error.message
+      };
+      console.log(`❌ Teste de preço spot falhou: ${error.message}`);
+    }
+
+    // Teste de preço futures
+    try {
+      const futuresResult = await this.getFuturesPrice("BTC/USDT");
+      results.testResults.futuresPriceTest = {
+        success: true,
+        symbol: "BTC/USDT",
+        price: futuresResult.price,
+        exchange: futuresResult.exchange
+      };
+      console.log(`✅ Preço Futures: BTC/USDT = $${futuresResult.price} via ${futuresResult.exchange}`);
+    } catch (error: any) {
+      results.testResults.futuresPriceTest = {
+        success: false,
+        error: error.message
+      };
+      console.log(`❌ Teste de preço futures falhou: ${error.message}`);
+    }
+
+    // Teste de funding rate
+    try {
+      const fundingResult = await this.getFundingRate("BTC/USDT");
+      results.testResults.fundingRateTest = {
+        success: true,
+        symbol: "BTC/USDT",
+        rate: fundingResult.rate,
+        exchange: fundingResult.exchange
+      };
+      console.log(`✅ Funding Rate: BTC/USDT = ${(fundingResult.rate * 100).toFixed(4)}% via ${fundingResult.exchange}`);
+    } catch (error: any) {
+      results.testResults.fundingRateTest = {
+        success: false,
+        error: error.message
+      };
+      console.log(`❌ Teste de funding rate falhou: ${error.message}`);
+    }
+
+    // Teste de volume
+    try {
+      const volumeResult = await this.get24hVolume("BTC/USDT");
+      results.testResults.volumeTest = {
+        success: true,
+        symbol: "BTC/USDT",
+        volume: volumeResult.volume,
+        exchange: volumeResult.exchange
+      };
+      console.log(`✅ Volume 24h: BTC/USDT = ${volumeResult.volume.toLocaleString()} via ${volumeResult.exchange}`);
+    } catch (error: any) {
+      results.testResults.volumeTest = {
+        success: false,
+        error: error.message
+      };
+      console.log(`❌ Teste de volume falhou: ${error.message}`);
+    }
+
+    // Teste de market data completo
+    try {
+      const marketData = await this.getMarketData("BTC/USDT");
+      results.testResults.marketDataTest = {
+        success: true,
+        symbol: "BTC/USDT",
+        data: marketData
+      };
+      console.log(`✅ Market Data: BTC/USDT completo via ${marketData.exchange}`);
+    } catch (error: any) {
+      results.testResults.marketDataTest = {
+        success: false,
+        error: error.message
+      };
+      console.log(`❌ Teste de market data falhou: ${error.message}`);
+    }
+
+    // 4. GERAR RECOMENDAÇÕES
+    if (results.systemHealth.overallStatus === "CRITICAL") {
+      results.recommendations.push("🚨 CRÍTICO: Nenhuma exchange disponível. Verifique conectividade de rede.");
+      results.recommendations.push("🔧 Verifique configurações de proxy/VPN se estiver em região com geo-bloqueio.");
+    } else if (results.systemHealth.overallStatus === "DEGRADED") {
+      results.recommendations.push("⚠️ Exchange principal (Binance) indisponível. Sistema operando com fallback.");
+      results.recommendations.push("🔄 Considere verificar conectividade com Binance ou usar VPN.");
+    } else {
+      results.recommendations.push("✅ Sistema operando normalmente.");
+    }
+
+    // Recomendações específicas por exchange
+    const failedExchanges = results.exchanges.filter(ex => !ex.available);
+    if (failedExchanges.length > 0) {
+      results.recommendations.push(`🔧 Exchanges com problemas: ${failedExchanges.map(ex => ex.name).join(", ")}`);
+    }
+
+    // Recomendações de performance
+    const slowExchanges = results.exchanges.filter(ex => ex.available && ex.latency && ex.latency > 2000);
+    if (slowExchanges.length > 0) {
+      results.recommendations.push(`🐌 Exchanges com alta latência: ${slowExchanges.map(ex => `${ex.name} (${ex.latency}ms)`).join(", ")}`);
+    }
+
+    // 5. DETERMINAR SUCESSO GERAL
+    const functionalTests = Object.values(results.testResults);
+    const successfulTests = functionalTests.filter(test => test.success).length;
+    const totalTests = functionalTests.length;
+    
+    results.success = results.systemHealth.availableExchanges > 0 && successfulTests >= (totalTests * 0.6); // 60% dos testes devem passar
+
+    const totalTime = Date.now() - startTime;
+    console.log(`🏁 Teste de conexão concluído em ${totalTime}ms`);
+    console.log(`📊 Status: ${results.systemHealth.overallStatus}`);
+    console.log(`✅ Exchanges disponíveis: ${results.systemHealth.availableExchanges}/${results.systemHealth.totalExchanges}`);
+    console.log(`🧪 Testes funcionais: ${successfulTests}/${totalTests} passaram`);
+
+    return results;
+  }
 } // fim da classe
 
 // --- exporta uma instância única do gerenciador ---
