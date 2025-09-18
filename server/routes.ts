@@ -34,6 +34,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Simple health check for Render.com
+  app.get("/api/health", async (req, res) => {
+    res.status(200).json({ ok: true, status: "healthy", timestamp: new Date().toISOString() });
+  });
+
   // Comprehensive health check
   app.get("/api/health/full", async (req, res) => {
     try {

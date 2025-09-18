@@ -99,7 +99,7 @@ async function startServer() {
   // Render uses PORT env variable, Replit uses 5000. Auto-detect platform.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = parseInt(process.env.PORT || '3000', 10);
   server.listen({
     port,
     host: "0.0.0.0",
