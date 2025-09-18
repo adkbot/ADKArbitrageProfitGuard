@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import BotControlButtons from '@/components/BotControlButtons';
-import StatusIndicator from '@/components/StatusIndicator';
-import ArbitrageChart from '@/components/ArbitrageChart';
-import ConfigurationModal from '@/components/ConfigurationModal';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import BotControlButtons from '../components/BotControlButtons';
+import StatusIndicator from '../components/StatusIndicator';
+import ArbitrageChart from '../components/ArbitrageChart';
+import ConfigurationModal from '../components/ConfigurationModal';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { useToast } from '../hooks/use-toast';
 import { DollarSign, Percent, Clock, Activity, TrendingUp, BarChart3, RefreshCw, Zap, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 
 type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';
