@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import ConfigurationModal from '../ConfigurationModal';
-import { Button } from '@/components/ui/button';
+import { Button } from '../../components/ui/button';
 
 export default function ConfigurationModalExample() {
   const [isOpen, setIsOpen] = useState(false);

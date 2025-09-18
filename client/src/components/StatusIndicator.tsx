@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '../components/ui/badge';
 import { Dot } from 'lucide-react';
 
 type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';

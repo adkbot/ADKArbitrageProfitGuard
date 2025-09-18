@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '../components/ui/button';
 import { Play, Pause, Square, Settings } from 'lucide-react';
 
 type BotStatus = 'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED';

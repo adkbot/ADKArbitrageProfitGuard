@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
 import { LineChart, BarChart3, Activity, TrendingUp, Radio } from 'lucide-react';
 import {
   Chart as ChartJS,

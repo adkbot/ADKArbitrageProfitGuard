@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import StatusIndicator from '../StatusIndicator';
-import { Button } from '@/components/ui/button';
+import { Button } from '../../components/ui/button';
 
 export default function StatusIndicatorExample() {
   const [status, setStatus] = useState<'IDLE' | 'RUNNING' | 'PAUSED' | 'STOPPED'>('IDLE');
