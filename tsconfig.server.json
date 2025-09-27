@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["server/**/*", "shared/**/*"],
+  "compilerOptions": {
+    "incremental": false
+  }
+}
